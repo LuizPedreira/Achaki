@@ -1,0 +1,46 @@
+Achados & Perdidos — Fatec | Versão de apresentação v3
+
+Projeto estático em **HTML + CSS + JavaScript**, pronto para GitHub Pages.
+
+#Login de demonstração
+- **E-mail:** `ana.rocha@fatec.sp.gov.br`
+- **Senha:** `1234`
+
+#Itens padrão
+Esta versão tem somente os três itens definidos para a apresentação:
+1. Chave de carro
+2. Carteira marrom com corrente
+3. Fone de ouvido
+
+As três fotos ficam no próprio repositório em `assets/items/`, portanto aparecem em qualquer dispositivo que acessar o GitHub Pages.
+
+#Melhorias da v3
+- Sem horário/Wi‑Fi fictícios
+- Navegação com histórico do navegador e URL por `#rota`
+- Busca e filtros com indicador de filtros ativos
+- Central de notificações
+- Correspondência inteligente entre item perdido e item encontrado
+- Fluxo mais realista do botão **“Este item é meu”**, com comprovação e contato
+- Status da solicitação de posse
+- Visualização ampliada das fotos
+- Rascunho automático nos formulários de item encontrado e perdido
+- Contadores de caracteres e validações
+- Fotos comprimidas antes de salvar
+- Backup e restauração em JSON
+- PWA instalável
+- Cache offline com Service Worker atualizado
+- `404.html` para melhor comportamento no GitHub Pages
+- Acessibilidade de foco e suporte a `prefers-reduced-motion`
+
+#GitHub Pages
+1. Crie um repositório.
+2. Envie todo o conteúdo desta pasta para a raiz do repositório.
+3. Vá em **Settings > Pages**.
+4. Em **Build and deployment**, escolha **Deploy from a branch**.
+5. Selecione `main` e `/ (root)`.
+6. Salve.
+
+#Observação importante
+O GitHub Pages publica os arquivos do sistema, mas não fornece banco de dados. Os três itens padrão são iguais para todos porque suas imagens e seus dados estão no código. Já cadastros feitos durante o uso, fotos enviadas, solicitações e avaliações ficam no `localStorage` daquele navegador.
+
+Para uma apresentação acadêmica isso é adequado e deixa o protótipo totalmente funcional sem backend. Se no futuro for necessário compartilhar dados entre dispositivos, o próximo passo é usar Supabase ou outro backend.

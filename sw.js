@@ -1,0 +1,6 @@
+const CACHE='achados-perdidos-v3';
+const CORE=['./','./index.html','./styles.css','./app.js','./favicon.png','./manifest.webmanifest'];
+const IMAGES=['./assets/items/fone.jpg','./assets/items/carteira.jpg','./assets/items/chave.jpg','./assets/avatars/ana.jpg','./assets/icons/icon-192.png','./assets/icons/icon-512.png'];
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([...CORE,...IMAGES])));self.skipWaiting()});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const url=new URL(e.request.url);const isImage=/\.(png|jpe?g|webp|svg)$/i.test(url.pathname);if(isImage){e.respondWith(caches.match(e.request).then(hit=>hit||fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c));return r})));return}e.respondWith(fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c));return r}).catch(()=>caches.match(e.request).then(hit=>hit||caches.match('./index.html'))))});
