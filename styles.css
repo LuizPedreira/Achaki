@@ -41,3 +41,17 @@
 .feedback-summary{border:0;background:transparent;padding:0;text-align:left;color:var(--text);display:flex;flex-direction:column;gap:2px;cursor:pointer}
 .feedback-summary b{font-size:11px;color:#b56c00}
 .feedback-summary span{font-size:8px;color:var(--muted)}
+
+/* v10 — Reservado com significado + confirmações visuais */
+.reservation-explainer,.admin-reserved-help{display:flex;gap:10px;align-items:flex-start;border:1px solid #f1d7a7;background:#fff8ea;border-radius:13px;padding:11px 12px;margin-top:10px;color:#6f4a00}
+.reservation-explainer .icon,.admin-reserved-help .icon{width:20px;height:20px;flex:0 0 auto;margin-top:1px}
+.reservation-explainer b,.admin-reserved-help b{display:block;font-size:10.5px;color:#6d4500;margin-bottom:3px}
+.reservation-explainer span,.admin-reserved-help span{display:block;font-size:9px;line-height:1.45;color:#87611f}
+.reservation-explainer small{display:block;font-size:8.5px;font-weight:700;margin-top:5px;color:#6d4500}
+.record-status-panel.reserved-panel{border-color:#f1d7a7;background:#fff8ea}.record-status-panel.reserved-panel>.icon{color:#b86c00}
+.success-backdrop{align-items:center;padding:18px}.success-sheet{border-radius:20px;max-width:390px;padding:22px 18px calc(22px + env(safe-area-inset-bottom));box-shadow:0 24px 70px rgba(17,26,46,.24)}
+.success-check{width:58px;height:58px;border-radius:50%;background:#eaf9ef;color:var(--green);display:grid;place-items:center;margin:0 auto 12px}.success-check .icon{width:30px;height:30px}
+.success-title{text-align:center;font-size:18px;margin:0;color:var(--text)}.success-subtitle{text-align:center;color:var(--muted);font-size:10px;line-height:1.5;margin:6px auto 14px;max-width:300px}
+.success-summary{border:1px solid var(--line);border-radius:13px;background:#fbfcfe;margin-bottom:14px;overflow:hidden}.success-summary>div{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-bottom:1px solid var(--line);font-size:9px}.success-summary>div:last-child{border-bottom:0}.success-summary span{color:var(--muted)}.success-summary b{text-align:right;color:var(--text)}
+.admin-reserved-help{margin:0 0 12px;background:#fff9ed}
+@media(min-width:800px){.success-backdrop{align-items:center}.success-sheet{max-width:430px;border-radius:20px}}

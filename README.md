@@ -95,3 +95,13 @@ O painel administrativo consolida as duas perspectivas no Histórico. A mesma pe
 ### Acessos simples para a apresentação
 - Aluno: `aluno@fatec` / `1234`
 - Administrador: `admin@fatec` / `1234`
+
+
+## v10 — cenário de demonstração e status Reservado
+- Ana encontrou o fone: **Em aberto**.
+- Lucas encontrou a carteira: **Reservado para Ana**.
+- Maria encontrou a chave: **Em aberto**, permanecendo com quem encontrou.
+- Ana possui uma solicitação de carteira perdida já relacionada à carteira reservada.
+- **Reservado** significa que um possível proprietário foi identificado e o objeto está separado enquanto a devolução é organizada; não significa que o item já foi entregue.
+- No painel, ao escolher Reservado, abre um formulário para identificar/vincular o possível proprietário.
+- Cadastros e devoluções agora exibem confirmação visual com resumo e próximos passos.

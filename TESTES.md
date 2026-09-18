@@ -26,3 +26,15 @@
 
 7. Durante uma avaliação, escreva um comentário, altere as estrelas e confirme que o comentário não é apagado.
 8. Tente alterar o perfil ou criar administrador usando e-mail já existente e confirme o bloqueio de duplicidade.
+
+
+## Testes da v10
+1. Entre como `aluno@fatec` / `1234`: Meus registros deve mostrar o fone encontrado e a carteira perdida.
+2. A carteira perdida deve mostrar “Possível item localizado”; ao abrir a carteira encontrada, o status Reservado deve ser explicado.
+3. Entre como `admin@fatec` / `1234`: em Itens encontrados, mudar um item para Reservado deve abrir o formulário de reserva.
+4. Selecione uma solicitação perdida, confirme a reserva e verifique o nome do possível proprietário na tabela.
+5. Volte o item para Em aberto e confirme que a reserva é removida.
+6. Cadastre um item encontrado: deve aparecer uma confirmação com “Ver registro”.
+7. Cadastre um item perdido: deve aparecer uma confirmação com “Ver em Meus registros”.
+8. Registre uma devolução: deve aparecer um resumo com item, proprietário, data e status.
+9. Editar item perdido no painel não deve permitir marcar Devolvido manualmente; use Registrar recuperação.
