@@ -1,19 +1,16 @@
-# Checklist de testes — Achaki v7
+# Roteiro de testes — v8
 
-1. Abrir `#home` sem login e visualizar somente itens aprovados.
-2. Abrir detalhe sem login; contato deve ficar bloqueado e redirecionar para login.
+1. Acesse sem login e confirme que os itens aparecem.
+2. Abra um item sem login: contato deve permanecer bloqueado; Entrar deve levar ao login e retornar ao item.
 3. Login de usuário: `ana.rocha@fatec.sp.gov.br` / `1234`.
-4. Voltar ao item e verificar botão de WhatsApp.
-5. Abrir Registrar item encontrado e testar **Escolher foto** com JPG/PNG/WebP.
-6. Testar **Usar câmera** em celular.
-7. Adicionar 1, 2 e 3 fotos; remover uma; primeira foto deve ser capa.
-8. Recarregar durante o preenchimento e confirmar restauração do rascunho.
-9. Publicar encontrado; deve aparecer em Meus registros aguardando aprovação.
-10. Registrar perdido; repetir registro idêntico deve ser bloqueado.
-11. Login admin: `admin@fatec.sp.gov.br` / `admin123`.
-12. Aprovar item encontrado, editar, alterar status e excluir.
-13. Registrar devolução pela administração.
-14. Em Histórico, alternar Devolvidos / Não devolvidos.
-15. Quando item estiver com o usuário, registrar devolução direta em Meus registros.
-16. Avaliar item recuperado/devolvido.
-17. Exportar histórico e backup.
+4. Cadastre item encontrado com 1–3 fotos. Não deve existir pergunta sobre devolução no cadastro.
+5. Após publicar, o item deve aparecer imediatamente na busca e em Meus registros.
+6. Se o item estiver “Está comigo”, registre a devolução por Meus registros após a entrega.
+7. Se estiver “Entreguei na Fatec”, somente o administrador deve registrar a devolução.
+8. Cadastre item perdido e confirme busca/filtros por categoria, palavra-chave, período, local e status.
+9. Login administrador: `admin@fatec.sp.gov.br` / `admin123`.
+10. No painel, edite/exclua registros e altere Em aberto/Reservado.
+11. Registre devolução de um item sob guarda da Fatec.
+12. Confira Histórico > Devolvidos e Não devolvidos.
+13. Confirme que o usuário pode avaliar uma devolução vinculada à solicitação de item perdido.
+14. Teste exportar/importar backup e configurações.
