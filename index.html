@@ -1,36 +1,22 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#c61f1f">
-  <meta name="description" content="Protótipo acadêmico do sistema Achados & Perdidos - Fatec Taquaritinga">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#c91f1f">
+  <meta name="description" content="Sistema de Achados e Perdidos da Fatec Taquaritinga">
   <title>Achados & Perdidos • Fatec</title>
   <link rel="icon" href="./favicon.png">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="phone-shell">
-    <main id="app"></main>
-
-    <nav id="bottomNav" class="bottom-nav hidden">
-      <button data-route="home" class="nav-item"><span class="nav-icon">⌂</span><small>Início</small></button>
-      <button data-route="lost" class="nav-item"><span class="nav-icon">⌕</span><small>Perdi algo</small></button>
-      <button data-route="found" class="nav-item nav-primary"><span class="plus">＋</span><small>Registrar</small></button>
-      <button data-route="records" class="nav-item"><span class="nav-icon">▤</span><small>Registros</small></button>
-      <button data-route="profile" class="nav-item"><span class="nav-icon">○</span><small>Perfil</small></button>
-    </nav>
-
-    <div id="toast" class="toast"></div>
-    <div id="modalRoot"></div>
-  </div>
-
-  <script src="app.js"></script>
+  <div id="app"></div>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
   <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
-    }
+    if ('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   </script>
 </body>
 </html>

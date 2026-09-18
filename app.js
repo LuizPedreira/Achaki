@@ -1,768 +1,98 @@
-
-const STORE = {
-  users:'apg_users_v3',
-  session:'apg_session_v3',
-  items:'apg_items_v3',
-  lost:'apg_lost_v3',
-  ratings:'apg_ratings_v3',
-  settings:'apg_settings_v3',
-  claims:'apg_claims_v3',
-  drafts:'apg_drafts_v3'
-};
-
-const state = {
-  route:'login',
-  category:'Todos',
-  recordTab:'Todos',
-  filters:{category:null,status:null,local:''},
-  selectedItem:null,
-  rating:4,
-  photos:[],
-  avatarTemp:null,
-  installPrompt:null,
-  lastSearch:'',
-  heroIndex:0
-};
-
-const app = document.getElementById('app');
-const nav = document.getElementById('bottomNav');
-const modalRoot = document.getElementById('modalRoot');
-
-const read = (k,fallback) => {
-  try{
-    const v=localStorage.getItem(k);
-    return v ? JSON.parse(v) : fallback;
-  }catch(e){return fallback}
-};
-const write = (k,v)=>localStorage.setItem(k,JSON.stringify(v));
-
+// Achados & Perdidos • Fatec — v4 — GitHub Pages / localStorage
+const K={users:'achaki_v4_users',session:'achaki_v4_session',items:'achaki_v4_items',lost:'achaki_v4_lost',returns:'achaki_v4_returns',ratings:'achaki_v4_ratings',settings:'achaki_v4_settings',pending:'achaki_v4_pending_redirect'};
+const DEMO_HASH='03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4';
+const ADMIN_HASH='240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9';
+const state={category:'Todos',filters:{status:'',local:'',dateFrom:'',dateTo:''},photos:[],recordsTab:'found',adminSearch:'',adminStatus:'',adminSection:'overview'};
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function get(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f}catch{return f}}function set(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function esc(v=''){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function id(prefix){return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}function today(){return new Date().toISOString().slice(0,10)}
+function fmt(d){if(!d)return 'Não informado';const p=d.split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d}
+function norm(s=''){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim()}function digits(s=''){return String(s).replace(/\D/g,'')}
+function waPhone(raw){let p=digits(raw);if((p.length===10||p.length===11)&&!p.startsWith('55'))p='55'+p;return p}
+function toast(msg){const e=$('#toast');e.textContent=msg;e.classList.add('show');clearTimeout(window.__t);window.__t=setTimeout(()=>e.classList.remove('show'),2400)}
+async function hashPassword(text){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function settings(){return get(K.settings,{campus:'Fatec Taquaritinga',sectorWhatsapp:'5516999990000',categories:['Eletrônicos','Documentos','Acessórios','Material escolar','Roupas','Outros'],locations:['Laboratório de Informática 3','Biblioteca','Cantina','Estacionamento','Secretaria','Bloco B'],requireApproval:true,allowDirectReturn:true})}
+function currentUser(){const sid=get(K.session,null);return get(K.users,[]).find(u=>u.id===sid&&u.active!==false)||null}function isAdmin(){return currentUser()?.role==='admin'}
+function itemPhoto(i){return i.photos?.[0]||'assets/items/fone.jpg'}function badgeClass(s){return s==='Devolvido'?'returned':s==='Reservado'?'reserved':s==='Pendente'?'pending':s==='Rejeitado'?'rejected':'open'}
+function go(hash){location.hash=hash.startsWith('#')?hash:'#'+hash}function route(){return location.hash||'#home'}
+function back(){history.length>1?history.back():go('#home')}
+function appWrap(content,type='public'){return `<div class="${type==='admin'?'admin-shell':type==='user'?'user-shell':'public-shell'}">${content}</div>`}
+function brand(){return `<div class="brand"><div class="brand-mark">⌑</div><div class="brand-copy"><b>Achados & Perdidos</b><small>${esc(settings().campus)}</small></div></div>`}
+function nav(active){return `<nav class="bottom-nav"><button class="nav-btn ${active==='home'?'active':''}" data-go="#home"><span class="ico">⌂</span>Início</button><button class="nav-btn ${active==='lost'?'active':''}" data-auth-go="#lost"><span class="ico">⌕</span>Perdi algo</button><button class="nav-btn ${active==='found'?'active':''}" data-auth-go="#found"><span class="nav-plus">＋</span>Registrar</button><button class="nav-btn ${active==='records'?'active':''}" data-auth-go="#records"><span class="ico">▤</span>Registros</button><button class="nav-btn ${active==='profile'?'active':''}" data-auth-go="#profile"><span class="ico">○</span>Perfil</button></nav>`}
+function bindCommon(){ $$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));$$('[data-auth-go]').forEach(b=>b.onclick=()=>requireUser(b.dataset.authGo));$$('[data-back]').forEach(b=>b.onclick=back)}
+function requireUser(dest){const u=currentUser();if(u&&u.role==='user')return go(dest);set(K.pending,dest);go('#login')}
 function seed(){
-  if(!localStorage.getItem(STORE.users)){
-    write(STORE.users,[{
-      id:'u-demo',
-      nome:'Ana Beatriz Rocha',
-      email:'ana.rocha@fatec.sp.gov.br',
-      telefone:'(16) 99876-5432',
-      senha:'1234',
-      curso:'ADS',
-      campus:'Fatec Taquaritinga',
-      avatar:'assets/avatars/ana.jpg'
-    }]);
-  }
-  if(!localStorage.getItem(STORE.items)){
-    write(STORE.items,[
-      {id:'i101',ownerId:'u-demo',titulo:'Chave de carro',descricao:'Chave de carro vermelha com chaveiro da Ferrari.',categoria:'Acessórios',data:'2026-09-08',local:'Estacionamento',destino:'Entreguei na Fatec',status:'Em aberto',photos:['assets/items/chave.jpg']},
-      {id:'i102',ownerId:'u-demo',titulo:'Carteira marrom com corrente',descricao:'Carteira marrom estilo couro com corrente metálica.',categoria:'Documentos',data:'2026-09-07',local:'Cantina',destino:'Entreguei na Fatec',status:'Reservado',photos:['assets/items/carteira.jpg']},
-      {id:'i103',ownerId:'u-demo',titulo:'Fone de ouvido',descricao:'Fone de ouvido over-ear na cor prata/cinza.',categoria:'Eletrônicos',data:'2026-09-06',local:'Biblioteca',destino:'Entreguei na Fatec',status:'Em aberto',photos:['assets/items/fone.jpg']}
-    ]);
-  }
-  if(!localStorage.getItem(STORE.lost)) write(STORE.lost,[]);
-  if(!localStorage.getItem(STORE.ratings)) write(STORE.ratings,[]);
-  if(!localStorage.getItem(STORE.settings)) write(STORE.settings,{notifications:true});
-  if(!localStorage.getItem(STORE.claims)) write(STORE.claims,[]);
-  if(!localStorage.getItem(STORE.drafts)) write(STORE.drafts,{found:{},lost:{}});
+ if(!localStorage.getItem(K.users))set(K.users,[
+  {id:'u-demo',name:'Ana Beatriz Rocha',email:'ana.rocha@fatec.sp.gov.br',phone:'(16) 99876-5432',passwordHash:DEMO_HASH,role:'user',active:true,course:'ADS',createdAt:'2026-09-01'},
+  {id:'u-admin',name:'Marina Souza',email:'admin@fatec.sp.gov.br',phone:'(16) 99999-0000',passwordHash:ADMIN_HASH,role:'admin',active:true,course:'Administração',createdAt:'2026-09-01'}]);
+ if(!localStorage.getItem(K.items))set(K.items,[
+  {id:'item-chave',ownerId:'u-demo',title:'Chave de carro',description:'Chave de carro vermelha com chaveiro da Ferrari.',category:'Acessórios',date:'2026-09-08',local:'Estacionamento',holder:'finder',status:'Em aberto',approval:'Aprovado',photos:['assets/items/chave-carro.jpg'],createdAt:'2026-09-08T14:20:00'},
+  {id:'item-carteira',ownerId:'u-demo',title:'Carteira marrom com corrente',description:'Carteira marrom estilo couro com corrente metálica.',category:'Documentos',date:'2026-09-07',local:'Cantina',holder:'fatec',status:'Em aberto',approval:'Aprovado',photos:['assets/items/carteira.jpg'],createdAt:'2026-09-07T11:00:00'},
+  {id:'item-fone',ownerId:'u-demo',title:'Fone de ouvido',description:'Fone de ouvido over-ear na cor prata/cinza.',category:'Eletrônicos',date:'2026-09-06',local:'Biblioteca',holder:'fatec',status:'Em aberto',approval:'Aprovado',photos:['assets/items/fone.jpg'],createdAt:'2026-09-06T16:15:00'}]);
+ if(!localStorage.getItem(K.lost))set(K.lost,[]);if(!localStorage.getItem(K.returns))set(K.returns,[]);if(!localStorage.getItem(K.ratings))set(K.ratings,[]);if(!localStorage.getItem(K.settings))set(K.settings,settings());
 }
-seed();
-
-function user(){
-  const sid=read(STORE.session,null);
-  return read(STORE.users,[]).find(u=>u.id===sid)||null;
-}
-function escapeHTML(v=''){
-  return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
-}
-function initials(n='Usuário'){
-  return n.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0].toUpperCase()).join('');
-}
-function fmtDate(d){
-  if(!d)return 'Não informada';
-  const p=d.split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d;
-}
-function today(){return new Date().toISOString().slice(0,10)}
-function iconFor(cat){
-  return {'Eletrônicos':'🎧','Documentos':'📄','Acessórios':'🔑','Material escolar':'📚','Roupas':'👕','Outros':'📦'}[cat]||'📦'
-}
-function statusClass(s){return s==='Reservado'?'reserved':s==='Devolvido'?'returned':'open'}
-function statusbar(){return ``}
-function normalizeText(v=''){
-  return String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9\s]/g,' ');
-}
-function meaningfulWords(v=''){
-  const stop=new Set(['de','da','do','das','dos','um','uma','com','sem','para','por','em','no','na','nos','nas','o','a','os','as','e']);
-  return [...new Set(normalizeText(v).split(/\s+/).filter(w=>w.length>2&&!stop.has(w)))];
-}
-function matchScore(lostItem, foundItem){
-  let score=0;
-  if(lostItem.categoria===foundItem.categoria) score+=3;
-  const a=meaningfulWords(`${lostItem.titulo} ${lostItem.descricao||''}`);
-  const b=new Set(meaningfulWords(`${foundItem.titulo} ${foundItem.descricao||''}`));
-  score += a.filter(w=>b.has(w)).length*2;
-  if(lostItem.local && foundItem.local && normalizeText(lostItem.local)===normalizeText(foundItem.local)) score+=2;
-  return score;
-}
-function bestMatch(lostItem){
-  const candidates=read(STORE.items,[]).filter(i=>i.status!=='Devolvido').map(i=>({item:i,score:matchScore(lostItem,i)})).sort((a,b)=>b.score-a.score);
-  return candidates[0]&&candidates[0].score>=3?candidates[0]:null;
-}
-function currentClaims(){
-  const u=user(); if(!u)return [];
-  return read(STORE.claims,[]).filter(c=>c.userId===u.id);
-}
-function notifications(){
-  const u=user(); if(!u)return [];
-  const list=[];
-  read(STORE.lost,[]).filter(l=>l.userId===u.id).forEach(l=>{
-    const m=bestMatch(l);
-    if(m) list.push({type:'match',title:'Possível item encontrado',text:`${m.item.titulo} pode corresponder a “${l.titulo}”.`,itemId:m.item.id});
-  });
-  currentClaims().forEach(c=>{
-    const item=read(STORE.items,[]).find(i=>i.id===c.itemId);
-    if(item) list.push({type:'claim',title:'Solicitação registrada',text:`Sua solicitação para “${item.titulo}” está ${c.status.toLowerCase()}.`,itemId:item.id});
-  });
-  return list.slice(0,6);
-}
-function activeFilterCount(){return [state.filters.category,state.filters.status,state.filters.local].filter(Boolean).length}
-function getDraft(type){return read(STORE.drafts,{found:{},lost:{}})[type]||{}}
-function saveDraft(type,data){const d=read(STORE.drafts,{found:{},lost:{}});d[type]={...(d[type]||{}),...data};write(STORE.drafts,d)}
-function clearDraft(type){const d=read(STORE.drafts,{found:{},lost:{}});d[type]={};write(STORE.drafts,d)}
-function hashFor(route,itemId){return `#${route}${itemId?'/'+encodeURIComponent(itemId):''}`}
-function parseHash(){
-  const raw=(location.hash||'').replace(/^#/,''); if(!raw)return null;
-  const [route,id]=raw.split('/'); return {route,itemId:id?decodeURIComponent(id):null};
-}
-function toast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(window.__toast); window.__toast=setTimeout(()=>el.classList.remove('show'),2200)
-}
-function categories(){return ['Eletrônicos','Documentos','Acessórios','Material escolar','Roupas','Outros']}
-function optionsCats(){return categories().map(c=>`<option>${c}</option>`).join('')}
-function avatarHTML(u,cls='avatar'){
-  return `<div class="${cls}">${u.avatar?`<img src="${u.avatar}" alt="">`:initials(u.nome)}</div>`
-}
-function setRoute(route,params={},replace=false){
-  state.route=route;
-  if(params.itemId) state.selectedItem=params.itemId;
-  const nextHash=hashFor(route,params.itemId||((route==='detail'||route==='rating')?state.selectedItem:null));
-  if(location.hash!==nextHash){
-    if(replace) history.replaceState({},'',nextHash); else history.pushState({},'',nextHash);
-  }
-  render();
-  window.scrollTo({top:0,behavior:'instant'});
-}
-function authRoute(){return ['login','register','forgot'].includes(state.route)}
-function render(){
-  if(!user()&&!authRoute()) state.route='login';
-  const map={login,register,forgot,home,found,lost,records,detail,rating,profile,editProfile,changePassword};
-  (map[state.route]||login)();
-  setupNav()
-}
-function setupNav(){
-  const hide=!user()||authRoute()||['detail','rating','editProfile','changePassword'].includes(state.route);
-  nav.classList.toggle('hidden',hide);
-  nav.querySelectorAll('[data-route]').forEach(b=>{
-    const active=b.dataset.route===state.route;
-    b.classList.toggle('active',active);
-    if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
-    b.onclick=()=>setRoute(b.dataset.route)
-  })
-}
-function passwordField(id,placeholder='••••••••'){
-  return `<div class="password-wrap"><input id="${id}" class="control" type="password" placeholder="${placeholder}"><button class="password-eye" type="button" data-eye="${id}">◉</button></div>`
-}
-function bindEyes(){
-  document.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{
-    const i=document.getElementById(b.dataset.eye);
-    i.type=i.type==='password'?'text':'password';
-    b.textContent=i.type==='password'?'◉':'◎'
-  })
-}
-
-function login(){
-  app.innerHTML=`
-  <section class="screen white no-nav">
-    ${statusbar()}
-    <div class="logo">⌑</div>
-    <h1>Achados & Perdidos</h1>
-    <div class="campus">Fatec Taquaritinga</div>
-    <p class="subtitle" style="margin-bottom:17px">Entre para registrar itens encontrados ou procurar algo que você perdeu no campus.</p>
-    <div class="field"><label>E-mail</label><input id="loginEmail" class="control" type="email" placeholder="seu@email.com"></div>
-    <div class="field"><label>Senha</label>${passwordField('loginPass')}</div>
-    <div class="row between" style="font-size:9px;margin:4px 0 14px"><label class="row" style="gap:5px"><input type="checkbox"> Lembrar de mim</label><span class="link" id="forgotLink">Esqueci minha senha</span></div>
-    <button class="btn" id="loginBtn">Entrar</button>
-    <div class="auth-foot">Não tem conta? <span class="link" id="regLink">Cadastre-se</span></div>
-    <div class="notice" style="margin-top:20px"><b>Acesso rápido para apresentação</b><br>ana.rocha@fatec.sp.gov.br • senha 1234</div>
-  </section>`;
-  bindEyes();
-  document.getElementById('loginBtn').onclick=()=>{
-    const email=document.getElementById('loginEmail').value.trim().toLowerCase();
-    const senha=document.getElementById('loginPass').value;
-    const u=read(STORE.users,[]).find(x=>x.email.toLowerCase()===email&&x.senha===senha);
-    if(!u)return toast('E-mail ou senha inválidos.');
-    write(STORE.session,u.id); setRoute('home'); toast('Login realizado com sucesso.')
-  };
-  document.getElementById('regLink').onclick=()=>setRoute('register');
-  document.getElementById('forgotLink').onclick=()=>setRoute('forgot');
-  document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginBtn').click()})
-}
-
-function register(){
-  app.innerHTML=`
-  <section class="screen white no-nav">
-    ${statusbar()}
-    <div class="topbar"><button class="icon-btn" id="back">‹</button><h2>Criar conta</h2><span></span></div>
-    <p class="subtitle" style="margin-bottom:13px">Preencha seus dados para acessar o sistema de achados e perdidos da Fatec.</p>
-    <div class="field"><label>Nome completo</label><input id="regName" class="control" placeholder="Seu nome completo"></div>
-    <div class="field"><label>E-mail</label><input id="regEmail" class="control" type="email" placeholder="seu@email.com"></div>
-    <div class="field"><label>Telefone</label><input id="regPhone" class="control" placeholder="(16) 99999-9999"></div>
-    <div class="grid2"><div class="field"><label>Curso</label><input id="regCourse" class="control" value="ADS"></div><div class="field"><label>Campus</label><input id="regCampus" class="control" value="Fatec Taquaritinga"></div></div>
-    <div class="field"><label>Senha</label>${passwordField('regPass','Mínimo 4 caracteres')}<div class="progress"><span id="strength" style="width:0%"></span></div></div>
-    <div class="field"><label>Confirmar senha</label>${passwordField('regConfirm','Repita a senha')}</div>
-    <label class="checkrow"><input id="terms" type="checkbox"><span>Li e aceito os Termos de uso e a Política de privacidade.</span></label>
-    <button class="btn" id="createAccount" style="margin-top:13px">Criar conta</button>
-    <div class="auth-foot">Já tem conta? <span class="link" id="loginLink">Entrar</span></div>
-  </section>`;
-  bindEyes();
-  document.getElementById('back').onclick=document.getElementById('loginLink').onclick=()=>setRoute('login');
-  document.getElementById('regPass').oninput=e=>document.getElementById('strength').style.width=`${Math.min(100,e.target.value.length*18)}%`;
-  document.getElementById('createAccount').onclick=()=>{
-    const nome=document.getElementById('regName').value.trim();
-    const email=document.getElementById('regEmail').value.trim().toLowerCase();
-    const senha=document.getElementById('regPass').value;
-    if(!nome||!email||!senha)return toast('Preencha nome, e-mail e senha.');
-    if(!email.includes('@'))return toast('Digite um e-mail válido.');
-    if(senha.length<4)return toast('A senha precisa ter pelo menos 4 caracteres.');
-    if(senha!==document.getElementById('regConfirm').value)return toast('As senhas não conferem.');
-    if(!document.getElementById('terms').checked)return toast('Aceite os termos para continuar.');
-    const users=read(STORE.users,[]);
-    if(users.some(u=>u.email.toLowerCase()===email))return toast('Esse e-mail já está cadastrado.');
-    const u={id:'u'+Date.now(),nome,email,telefone:document.getElementById('regPhone').value.trim(),senha,curso:document.getElementById('regCourse').value.trim(),campus:document.getElementById('regCampus').value.trim(),avatar:null};
-    users.push(u); write(STORE.users,users); write(STORE.session,u.id);
-    setRoute('home'); toast('Conta criada com sucesso.')
-  }
-}
-
-function forgot(){
-  app.innerHTML=`
-  <section class="screen white no-nav">
-    ${statusbar()}
-    <div class="topbar"><button class="icon-btn" id="back">×</button><h2>Recuperar senha</h2><span></span></div>
-    <div class="logo" style="background:#fff0f0;color:var(--red)">♧</div>
-    <h2>Esqueceu sua senha?</h2>
-    <p class="subtitle" style="margin-bottom:16px">Informe o e-mail cadastrado. Nesta versão acadêmica, a senha é exibida apenas para demonstração.</p>
-    <div class="field"><label>E-mail cadastrado</label><input id="forgotEmail" class="control" type="email"></div>
-    <button class="btn" id="recover">Recuperar senha</button>
-    <div class="notice success" style="margin-top:13px">Nenhum e-mail real é enviado neste protótipo.</div>
-  </section>`;
-  document.getElementById('back').onclick=()=>setRoute('login');
-  document.getElementById('recover').onclick=()=>{
-    const e=document.getElementById('forgotEmail').value.trim().toLowerCase();
-    const u=read(STORE.users,[]).find(x=>x.email.toLowerCase()===e);
-    if(!u)return toast('E-mail não encontrado.');
-    alert(`Protótipo acadêmico\n\nSenha cadastrada: ${u.senha}\n\nEm produção, seria enviado um link de recuperação.`)
-  }
-}
-
-function home(){
-  const u=user();
-  const notes=notifications();
-  const filterCount=activeFilterCount();
-  app.innerHTML=`
-  <section class="screen page-enter">
-    <div class="home-head premium-head">
-      <div class="row">${avatarHTML(u)}<div class="greet"><strong>Olá, ${escapeHTML(u.nome.split(' ')[0])}</strong><span class="tiny muted">Encontrou ou perdeu algo hoje?</span></div></div>
-      <button class="icon-btn notification-btn" id="bell" aria-label="Notificações">♢${notes.length?`<span class="notify-dot">${notes.length}</span>`:''}</button>
-    </div>
-    <div class="search-row"><div class="search-box"><span>⌕</span><input id="search" class="control" value="${escapeHTML(state.lastSearch)}" placeholder="Buscar por palavra-chave"></div><button class="filter-btn" id="filters" aria-label="Filtros">☷${filterCount?`<span class="filter-count">${filterCount}</span>`:''}</button></div>
-    <div class="quick-grid">
-      <button class="quick-card red" id="foundBtn"><span class="qicon">＋</span><span><b>Encontrei um item</b><small>Registrar achado</small></span></button>
-      <button class="quick-card dark" id="lostBtn"><span class="qicon">⌕</span><span><b>Perdi um item</b><small>Abrir solicitação</small></span></button>
-    </div>
-    ${renderMatchBanner()}
-    <div class="chips" id="categoryChips">${['Todos',...categories().slice(0,5)].map(c=>`<button class="chip ${state.category===c?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
-    <div class="section-head"><h3>Itens encontrados recentemente</h3><span class="tiny muted" id="resultCount"></span></div>
-    <div id="itemList" class="item-list"></div>
-  </section>`;
-  document.getElementById('foundBtn').onclick=()=>setRoute('found');
-  document.getElementById('lostBtn').onclick=()=>setRoute('lost');
-  document.getElementById('filters').onclick=openFilters;
-  document.getElementById('search').oninput=e=>{state.lastSearch=e.target.value;renderItems()};
-  document.getElementById('bell').onclick=openNotifications;
-  document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{state.category=b.dataset.cat;home()});
-  document.querySelectorAll('[data-match-item]').forEach(b=>b.onclick=()=>setRoute('detail',{itemId:b.dataset.matchItem}));
-  renderItems()
-}
-function renderMatchBanner(){
-  const u=user(); if(!u)return '';
-  const lost=read(STORE.lost,[]).filter(l=>l.userId===u.id);
-  for(const l of lost){
-    const m=bestMatch(l);
-    if(m) return `<button class="match-banner" data-match-item="${m.item.id}"><span class="match-icon">✦</span><span><b>Encontramos uma possível correspondência</b><small>${escapeHTML(m.item.titulo)} pode ser o seu item perdido.</small></span><span class="match-arrow">›</span></button>`;
-  }
-  return '';
-}
-function openNotifications(){
-  const notes=notifications();
-  modalRoot.innerHTML=`<div class="modal-backdrop" id="notesBackdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><div><h3>Notificações</h3><div class="tiny muted">Atualizações importantes dos seus registros</div></div><button class="icon-btn flat" id="closeNotes">×</button></div>${notes.length?`<div class="notification-list">${notes.map((n,idx)=>`<button class="notification-card" data-note-item="${n.itemId}"><span class="note-icon">${n.type==='match'?'✦':'✓'}</span><span><b>${escapeHTML(n.title)}</b><small>${escapeHTML(n.text)}</small></span><span>›</span></button>`).join('')}</div>`:`<div class="empty"><div class="big">♢</div>Nenhuma notificação no momento.</div>`}</div></div>`;
-  document.getElementById('closeNotes').onclick=closeModal;
-  document.getElementById('notesBackdrop').onclick=e=>{if(e.target.id==='notesBackdrop')closeModal()};
-  document.querySelectorAll('[data-note-item]').forEach(b=>b.onclick=()=>{closeModal();setRoute('detail',{itemId:b.dataset.noteItem})});
-}
-
-function thumb(i){return i.photos?.[0]?`<img src="${i.photos[0]}" alt="Foto de ${escapeHTML(i.titulo)}" loading="lazy">`:iconFor(i.categoria)}
-function filteredItems(){
-  const q=(document.getElementById('search')?.value||'').trim().toLowerCase();
-  return read(STORE.items,[]).filter(i=>{
-    const search=!q||`${i.titulo} ${i.descricao} ${i.local} ${i.categoria}`.toLowerCase().includes(q);
-    const cat=state.category==='Todos'||i.categoria===state.category;
-    const fcat=!state.filters.category||i.categoria===state.filters.category;
-    const fstatus=!state.filters.status||i.status===state.filters.status;
-    const flocal=!state.filters.local||i.local.toLowerCase().includes(state.filters.local.toLowerCase());
-    return search&&cat&&fcat&&fstatus&&flocal
-  })
-}
-function renderItems(){
-  const el=document.getElementById('itemList'); if(!el)return;
-  const items=filteredItems();
-  const count=document.getElementById('resultCount');if(count)count.textContent=`${items.length} ${items.length===1?'item':'itens'}`;
-  el.innerHTML=items.length?items.map(i=>`
-  <article class="item-card clickable" data-item="${i.id}">
-    <div class="item-thumb">${thumb(i)}</div>
-    <div>
-      <div class="row between"><span class="tiny muted">${escapeHTML(i.categoria)}</span><span class="badge ${statusClass(i.status)}">${i.status}</span></div>
-      <div class="item-title">${escapeHTML(i.titulo)}</div>
-      <div class="item-meta">⌖ ${escapeHTML(i.local)} &nbsp; ▣ ${fmtDate(i.data)}</div>
-    </div>
-  </article>`).join(''):`<div class="empty"><div class="big">⌕</div>Nenhum item encontrado.</div>`;
-  document.querySelectorAll('[data-item]').forEach(x=>x.onclick=()=>setRoute('detail',{itemId:x.dataset.item}))
-}
-
-function openFilters(){
-  modalRoot.innerHTML=`
-  <div class="modal-backdrop" id="filterBackdrop">
-    <div class="sheet">
-      <div class="handle"></div>
-      <div class="sheet-head"><h3>Filtros</h3><span class="link tiny" id="clear">Limpar tudo</span></div>
-      <div class="filter-block"><strong>Categoria</strong><div class="filter-wrap" id="filterCats">${['Todas',...categories()].map(c=>`<button class="chip ${(c==='Todas'&&!state.filters.category)||state.filters.category===c?'active':''}" data-fcat="${c}">${c}</button>`).join('')}</div></div>
-      <div class="filter-block"><strong>Status</strong><div class="filter-wrap" id="filterStatus">${['Em aberto','Reservado','Devolvido'].map(s=>`<button class="chip ${state.filters.status===s?'active':''}" data-fstatus="${s}">${s}</button>`).join('')}</div></div>
-      <div class="field"><label>Local</label><input id="filterLocal" class="control" value="${escapeHTML(state.filters.local)}" placeholder="Todos os locais"></div>
-      <div class="grid2"><button class="btn secondary" id="cancelFilters">Cancelar</button><button class="btn" id="applyFilters">Aplicar filtros</button></div>
-    </div>
-  </div>`;
-  document.querySelectorAll('[data-fcat]').forEach(b=>b.onclick=()=>{
-    document.querySelectorAll('[data-fcat]').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active'); state.filters.category=b.dataset.fcat==='Todas'?null:b.dataset.fcat
-  });
-  document.querySelectorAll('[data-fstatus]').forEach(b=>b.onclick=()=>{
-    const active=b.classList.contains('active');
-    document.querySelectorAll('[data-fstatus]').forEach(x=>x.classList.remove('active'));
-    state.filters.status=null;
-    if(!active){b.classList.add('active');state.filters.status=b.dataset.fstatus}
-  });
-  document.getElementById('clear').onclick=()=>{state.filters={category:null,status:null,local:''};closeModal();renderItems()};
-  document.getElementById('cancelFilters').onclick=closeModal;
-  document.getElementById('applyFilters').onclick=()=>{state.filters.local=document.getElementById('filterLocal').value.trim();closeModal();renderItems()};
-  document.getElementById('filterBackdrop').onclick=e=>{if(e.target.id==='filterBackdrop')closeModal()}
-}
-function closeModal(){modalRoot.innerHTML=''}
-
-function found(){
-  const draft=getDraft('found');
-  state.photos=Array.isArray(draft.photos)?draft.photos:[];
-  app.innerHTML=`
-  <section class="screen page-enter">
-    <div class="topbar"><button class="icon-btn" id="back">×</button><h2>Registrar item encontrado</h2><span></span></div>
-    <div class="form-progress"><span></span><span></span><span></span></div>
-    <div class="upload-zone">
-      <div class="upload-head"><div><b class="small">Fotos do item</b><div class="tiny muted">Até 3 fotos. Elas são comprimidas automaticamente.</div></div><span id="photoCount" class="tiny muted">${state.photos.length}/3</span></div>
-      <div class="photo-grid" id="photoGrid"></div>
-    </div>
-    <div class="field"><label>Título do item</label><input id="fTitle" class="control" maxlength="60" value="${escapeHTML(draft.titulo||'')}" placeholder="Ex.: Fone de ouvido sem fio"><div class="field-hint"><span>Seja objetivo</span><span id="titleCount">${(draft.titulo||'').length}/60</span></div></div>
-    <div class="field"><label>Descrição</label><textarea id="fDesc" class="control" maxlength="240" placeholder="Cor, marca, estado e outros detalhes">${escapeHTML(draft.descricao||'')}</textarea><div class="field-hint"><span>Detalhes ajudam na identificação</span><span id="descCount">${(draft.descricao||'').length}/240</span></div></div>
-    <div class="grid2"><div class="field"><label>Categoria</label><select id="fCat" class="control">${optionsCats()}</select></div><div class="field"><label>Data do encontro</label><input id="fDate" class="control" type="date" value="${draft.data||today()}"></div></div>
-    <div class="field"><label>Local onde foi encontrado</label><input id="fLocal" class="control" value="${escapeHTML(draft.local||'')}" placeholder="Ex.: Laboratório de Informática 3"></div>
-    <div class="field"><label>Onde o item está agora?</label><select id="fDest" class="control"><option>Entreguei na Fatec</option><option>Está comigo</option></select></div>
-    <div class="draft-status">✓ Rascunho salvo automaticamente neste dispositivo</div>
-    <button id="publish" class="btn" style="margin-top:11px">Publicar registro</button>
-  </section>`;
-  if(draft.categoria)document.getElementById('fCat').value=draft.categoria;
-  if(draft.destino)document.getElementById('fDest').value=draft.destino;
-  document.getElementById('back').onclick=()=>setRoute('home');
-  renderPhotoGrid();
-  bindFoundDraft();
-  document.getElementById('publish').onclick=saveFound
-}
-function bindFoundDraft(){
-  const ids=['fTitle','fDesc','fCat','fDate','fLocal','fDest'];
-  const save=()=>saveDraft('found',{titulo:document.getElementById('fTitle').value,descricao:document.getElementById('fDesc').value,categoria:document.getElementById('fCat').value,data:document.getElementById('fDate').value,local:document.getElementById('fLocal').value,destino:document.getElementById('fDest').value,photos:[...state.photos]});
-  ids.forEach(id=>document.getElementById(id).addEventListener('input',save));
-  document.getElementById('fTitle').addEventListener('input',e=>document.getElementById('titleCount').textContent=`${e.target.value.length}/60`);
-  document.getElementById('fDesc').addEventListener('input',e=>document.getElementById('descCount').textContent=`${e.target.value.length}/240`);
-}
-
-async function handlePhotos(files){
-  for(const f of [...files]){
-    if(state.photos.length>=3)break;
-    if(!f.type.startsWith('image/'))continue;
-    try{state.photos.push(await compressImage(f,640,.60))}
-    catch(e){toast('Não foi possível processar uma foto.')}
-  }
-  renderPhotoGrid();saveDraft('found',{photos:[...state.photos]})
-}
-function compressImage(file,max=760,quality=.64){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=()=>{
-      const img=new Image();
-      img.onload=()=>{
-        let w=img.width,h=img.height,scale=Math.min(1,max/Math.max(w,h));
-        w=Math.round(w*scale);h=Math.round(h*scale);
-        const c=document.createElement('canvas');c.width=w;c.height=h;
-        c.getContext('2d').drawImage(img,0,0,w,h);
-        res(c.toDataURL('image/jpeg',quality))
-      };
-      img.onerror=rej; img.src=r.result
-    };
-    r.onerror=rej;r.readAsDataURL(file)
-  })
-}
-function renderPhotoGrid(){
-  const grid=document.getElementById('photoGrid');if(!grid)return;
-  grid.innerHTML=state.photos.map((p,i)=>`<div class="photo-slot"><img src="${p}" alt=""><button class="remove-photo" data-rm="${i}">×</button></div>`).join('')+(state.photos.length<3?`<label class="upload-button"><span>▧</span><b>Adicionar</b><input id="photoInput2" hidden type="file" accept="image/*" capture="environment" multiple></label>`:'');
-  document.getElementById('photoCount').textContent=`${state.photos.length}/3`;
-  document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=e=>{e.preventDefault();state.photos.splice(+b.dataset.rm,1);renderPhotoGrid();saveDraft('found',{photos:[...state.photos]})});
-  const inp=document.getElementById('photoInput2');if(inp)inp.onchange=e=>handlePhotos(e.target.files)
-}
-function saveFound(){
-  const title=document.getElementById('fTitle').value.trim(),local=document.getElementById('fLocal').value.trim();
-  if(!title)return toast('Informe o título do item.');
-  if(!local)return toast('Informe o local onde foi encontrado.');
-  const items=read(STORE.items,[]);
-  const item={id:'i'+Date.now(),ownerId:user().id,titulo:title,descricao:document.getElementById('fDesc').value.trim(),categoria:document.getElementById('fCat').value,data:document.getElementById('fDate').value||today(),local,destino:document.getElementById('fDest').value,status:'Em aberto',photos:[...state.photos],createdAt:new Date().toISOString()};
-  try{items.unshift(item);write(STORE.items,items)}
-  catch(e){return toast('Armazenamento cheio. Remova uma foto e tente novamente.')}
-  clearDraft('found');state.photos=[];state.selectedItem=item.id; setRoute('detail',{itemId:item.id}); toast('Item publicado com sucesso.')
-}
-
-function lost(){
-  const draft=getDraft('lost');
-  app.innerHTML=`
-  <section class="screen page-enter">
-    <div class="topbar"><button class="icon-btn" id="back">‹</button><h2>Registrar item perdido</h2><span></span></div>
-    <div class="notice info-strong"><b>Quanto mais detalhes, melhor.</b><br>O sistema compara seu registro com itens encontrados e pode sugerir correspondências.</div>
-    <div class="field" style="margin-top:11px"><label>O que você perdeu?</label><input id="lTitle" class="control" maxlength="60" value="${escapeHTML(draft.titulo||'')}" placeholder="Ex.: Chave de carro vermelha"></div>
-    <div class="field"><label>Descrição</label><textarea id="lDesc" class="control" maxlength="240" placeholder="Cor, marca, adesivos ou qualquer detalhe">${escapeHTML(draft.descricao||'')}</textarea></div>
-    <div class="grid2"><div class="field"><label>Categoria</label><select id="lCat" class="control">${optionsCats()}</select></div><div class="field"><label>Data aproximada</label><input id="lDate" class="control" type="date" value="${draft.data||today()}"></div></div>
-    <div class="field"><label>Onde acha que perdeu? (opcional)</label><input id="lLocal" class="control" value="${escapeHTML(draft.local||'')}" placeholder="Ex.: Estacionamento"></div>
-    <div class="card row between" style="margin-bottom:10px"><div><b class="small">Compartilhar meu contato</b><div class="tiny muted">Permite que a equipe fale com você.</div></div><button id="contactSwitch" class="switch ${draft.compartilharContato===false?'':'on'}"></button></div>
-    <div class="draft-status">✓ Rascunho salvo automaticamente neste dispositivo</div>
-    <button id="saveLost" class="btn" style="margin-top:10px">Registrar solicitação</button>
-  </section>`;
-  if(draft.categoria)document.getElementById('lCat').value=draft.categoria;
-  document.getElementById('back').onclick=()=>setRoute('home');
-  document.getElementById('contactSwitch').onclick=e=>{e.currentTarget.classList.toggle('on');saveLostDraft()};
-  ['lTitle','lDesc','lCat','lDate','lLocal'].forEach(id=>document.getElementById(id).addEventListener('input',saveLostDraft));
-  document.getElementById('saveLost').onclick=()=>{
-    const t=document.getElementById('lTitle').value.trim();
-    if(!t)return toast('Informe o item que você perdeu.');
-    const arr=read(STORE.lost,[]);
-    const item={id:'l'+Date.now(),userId:user().id,titulo:t,descricao:document.getElementById('lDesc').value.trim(),categoria:document.getElementById('lCat').value,data:document.getElementById('lDate').value,local:document.getElementById('lLocal').value.trim(),compartilharContato:document.getElementById('contactSwitch').classList.contains('on'),status:'Em aberto',createdAt:new Date().toISOString()};
-    arr.unshift(item);write(STORE.lost,arr);clearDraft('lost');
-    const m=bestMatch(item);
-    setRoute('records');toast(m?'Solicitação registrada. Encontramos uma possível correspondência!':'Solicitação registrada.')
-  }
-}
-function saveLostDraft(){
-  saveDraft('lost',{titulo:document.getElementById('lTitle').value,descricao:document.getElementById('lDesc').value,categoria:document.getElementById('lCat').value,data:document.getElementById('lDate').value,local:document.getElementById('lLocal').value,compartilharContato:document.getElementById('contactSwitch').classList.contains('on')})
-}
-
-function detail(){
-  const i=read(STORE.items,[]).find(x=>x.id===state.selectedItem);
-  if(!i)return setRoute('home');
-  const photos=i.photos||[];
-  const myClaim=currentClaims().find(c=>c.itemId===i.id);
-  app.innerHTML=`
-  <section class="screen no-nav" style="padding-bottom:82px">
-    ${statusbar()}
-    <div class="detail-hero">
-      ${photos[0]?`<img id="heroImage" class="zoomable" src="${photos[0]}" alt="Foto de ${escapeHTML(i.titulo)}">`:`<div class="detail-placeholder">${iconFor(i.categoria)}</div>`}
-      <div class="hero-actions"><button id="back" class="icon-btn">‹</button><button id="share" class="icon-btn">↗</button></div>
-      ${photos.length>1?`<div class="dots">${photos.map((_,idx)=>`<span class="dot ${idx===0?'active':''}" data-dot="${idx}"></span>`).join('')}</div>`:''}
-    </div>
-    <div class="row between"><span class="badge ${statusClass(i.status)}">${i.status}</span><span class="tiny muted">Código #${i.id.slice(-6).toUpperCase()}</span></div>
-    <h2 style="margin-top:8px">${escapeHTML(i.titulo)}</h2>
-    <p class="subtitle" style="margin-bottom:11px">${escapeHTML(i.descricao||'Sem descrição informada.')}</p>
-    <div class="card detail-info">
-      <div class="info-row">◈ Categoria<br><b>${escapeHTML(i.categoria)}</b></div>
-      <div class="info-row">⌖ Local onde foi encontrado<br><b>${escapeHTML(i.local)}</b></div>
-      <div class="info-row">▣ Data do encontro<br><b>${fmtDate(i.data)}</b></div>
-    </div>
-    <div class="notice success" style="margin-top:9px"><b>Onde o item está agora</b><br>${escapeHTML(i.destino)}</div>
-    ${myClaim?`<div class="claim-status"><span>✓</span><div><b>Solicitação enviada</b><small>Status: ${escapeHTML(myClaim.status)}</small></div></div>`:''}
-  </section>
-  <div class="sticky"><button id="claim" class="btn" ${(i.status==='Devolvido'||myClaim)?'disabled':''}>${i.status==='Devolvido'?'Item já devolvido':myClaim?'Solicitação em análise':'Este item é meu'}</button></div>`;
-  document.getElementById('back').onclick=()=>setRoute('home');
-  document.getElementById('share').onclick=async()=>{
-    const text=`${i.titulo} - encontrado em ${i.local}`;
-    if(navigator.share){try{await navigator.share({title:'Achados & Perdidos',text})}catch(e){}}
-    else{navigator.clipboard?.writeText(text);toast('Informações copiadas.')}
-  };
-  const claim=document.getElementById('claim');
-  if(!claim.disabled)claim.onclick=()=>openClaimModal(i);
-  const hero=document.getElementById('heroImage');if(hero)hero.onclick=()=>openLightbox(photos,state.heroIndex||0);
-  document.querySelectorAll('[data-dot]').forEach(d=>d.onclick=()=>{
-    state.heroIndex=+d.dataset.dot;document.getElementById('heroImage').src=photos[state.heroIndex];
-    document.querySelectorAll('.dot').forEach(x=>x.classList.remove('active'));d.classList.add('active')
-  })
-}
-function openClaimModal(item){
-  const u=user();
-  modalRoot.innerHTML=`<div class="modal-backdrop" id="claimBackdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><div><h3>Confirmar que o item é seu</h3><div class="tiny muted">A equipe poderá usar estes dados para conferir a propriedade.</div></div><button class="icon-btn flat" id="closeClaim">×</button></div><div class="claim-preview"><div class="item-thumb">${thumb(item)}</div><div><b>${escapeHTML(item.titulo)}</b><small>${escapeHTML(item.local)} · ${fmtDate(item.data)}</small></div></div><div class="field"><label>Conte um detalhe que só o dono saberia</label><textarea id="claimProof" class="control" maxlength="200" placeholder="Ex.: possui um risco no lado esquerdo, chave reserva em casa..."></textarea></div><div class="field"><label>Contato para retorno</label><input id="claimContact" class="control" value="${escapeHTML(u.telefone||u.email)}"></div><div class="notice warning">O item ficará reservado enquanto a solicitação estiver em análise.</div><div class="grid2" style="margin-top:10px"><button class="btn secondary" id="cancelClaim">Cancelar</button><button class="btn" id="sendClaim">Enviar solicitação</button></div></div></div>`;
-  document.getElementById('closeClaim').onclick=document.getElementById('cancelClaim').onclick=closeModal;
-  document.getElementById('claimBackdrop').onclick=e=>{if(e.target.id==='claimBackdrop')closeModal()};
-  document.getElementById('sendClaim').onclick=()=>{
-    const proof=document.getElementById('claimProof').value.trim();
-    if(proof.length<5)return toast('Informe um detalhe para ajudar na conferência.');
-    const claims=read(STORE.claims,[]);claims.push({id:'c'+Date.now(),itemId:item.id,userId:u.id,proof,contact:document.getElementById('claimContact').value.trim(),status:'Em análise',createdAt:new Date().toISOString()});write(STORE.claims,claims);
-    const items=read(STORE.items,[]),target=items.find(x=>x.id===item.id);if(target){target.status='Reservado';target.claimedBy=u.id;write(STORE.items,items)}
-    closeModal();detail();toast('Solicitação enviada para conferência.')
-  }
-}
-function openLightbox(photos,index=0){
-  if(!photos?.length)return;
-  let current=index;
-  const draw=()=>{modalRoot.innerHTML=`<div class="lightbox" id="lightbox"><button class="lightbox-close" id="lightboxClose">×</button><img src="${photos[current]}" alt="Foto ampliada"><div class="lightbox-count">${current+1} / ${photos.length}</div>${photos.length>1?`<button class="lightbox-nav prev" id="lightPrev">‹</button><button class="lightbox-nav next" id="lightNext">›</button>`:''}</div>`;document.getElementById('lightboxClose').onclick=closeModal;document.getElementById('lightbox').onclick=e=>{if(e.target.id==='lightbox')closeModal()};if(photos.length>1){document.getElementById('lightPrev').onclick=()=>{current=(current-1+photos.length)%photos.length;draw()};document.getElementById('lightNext').onclick=()=>{current=(current+1)%photos.length;draw()}}};draw()
-}
-
-function records(){
-  const u=user();
-  const foundItems=read(STORE.items,[]).filter(i=>i.ownerId===u.id);
-  const lostItems=read(STORE.lost,[]).filter(i=>i.userId===u.id);
-  let body='';
-  if(state.recordTab==='Todos'||state.recordTab==='Encontrei') body+=foundItems.map(foundCard).join('');
-  if(state.recordTab==='Todos'||state.recordTab==='Perdi') body+=lostItems.map(lostCard).join('');
-  app.innerHTML=`
-  <section class="screen">
-    ${statusbar()}
-    <div class="home-head"><h2>Meus registros</h2><button class="icon-btn">☷</button></div>
-    <div class="segment">${['Todos','Encontrei','Perdi'].map(t=>`<button class="${state.recordTab===t?'active':''}" data-tab="${t}">${t}</button>`).join('')}</div>
-    <div>${body||`<div class="empty"><div class="big">▤</div>Nenhum registro por aqui.</div>`}</div>
-  </section>`;
-  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.recordTab=b.dataset.tab;records()});
-  document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>setRoute('detail',{itemId:b.dataset.detail}));
-  document.querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>{state.selectedItem=b.dataset.rate;setRoute('rating')});
-  document.querySelectorAll('[data-delete-found]').forEach(b=>b.onclick=()=>deleteFound(b.dataset.deleteFound));
-  document.querySelectorAll('[data-delete-lost]').forEach(b=>b.onclick=()=>deleteLost(b.dataset.deleteLost))
-}
-function foundCard(i){
-  return `<div class="card record-card">
-    <div class="row"><div class="item-thumb">${thumb(i)}</div><div style="flex:1;min-width:0"><div class="tiny muted">Você encontrou</div><div class="item-title">${escapeHTML(i.titulo)}</div><div class="item-meta">${escapeHTML(i.local)} · ${fmtDate(i.data)}</div></div><span class="badge ${statusClass(i.status)}">${i.status}</span></div>
-    <div class="record-actions"><span>${i.destino==='Entreguei na Fatec'?'▣ Entregue à Fatec':'○ Está com você'}</span><span>
-      ${i.status==='Devolvido'?`<span class="link" data-rate="${i.id}">Avaliar</span>`:`<span class="link" data-detail="${i.id}">Detalhes</span>`}
-      &nbsp; <span class="link" data-delete-found="${i.id}">Excluir</span>
-    </span></div>
-  </div>`
-}
-function lostCard(i){
-  const m=bestMatch(i);
-  return `<div class="card record-card">
-    <div class="row"><div class="item-thumb">${iconFor(i.categoria)}</div><div style="flex:1;min-width:0"><div class="tiny muted">Você perdeu</div><div class="item-title">${escapeHTML(i.titulo)}</div><div class="item-meta">${escapeHTML(i.local||'Local não informado')} · ${fmtDate(i.data)}</div></div><span class="badge open">${i.status}</span></div>
-    ${m?`<button class="inline-match" data-detail="${m.item.id}"><span>✦</span><span><b>Possível correspondência</b><small>${escapeHTML(m.item.titulo)} · ${escapeHTML(m.item.local)}</small></span><span>›</span></button>`:''}
-    <div class="record-actions"><span>${i.compartilharContato?'Contato compartilhado':'Contato privado'}</span><span class="link" data-delete-lost="${i.id}">Excluir</span></div>
-  </div>`
-}
-function deleteFound(id){
-  if(!confirm('Excluir este registro encontrado?'))return;
-  write(STORE.items,read(STORE.items,[]).filter(i=>i.id!==id));records();toast('Registro excluído.')
-}
-function deleteLost(id){
-  if(!confirm('Excluir esta solicitação de item perdido?'))return;
-  write(STORE.lost,read(STORE.lost,[]).filter(i=>i.id!==id));records();toast('Solicitação excluída.')
-}
-
-function rating(){
-  const i=read(STORE.items,[]).find(x=>x.id===state.selectedItem);
-  if(!i)return setRoute('records');
-  app.innerHTML=`
-  <section class="screen no-nav">
-    ${statusbar()}
-    <div class="topbar"><button id="back" class="icon-btn">‹</button><h2>Avaliar devolução</h2><span></span></div>
-    <div class="card"><div class="row"><div class="item-thumb">${thumb(i)}</div><div><b class="small">${escapeHTML(i.titulo)}</b><div class="tiny muted">${escapeHTML(i.local)} · ${fmtDate(i.data)}</div></div></div></div>
-    <div class="card" style="margin-top:9px;text-align:center"><h3>Como foi o processo de devolução?</h3><div class="star-row">${[1,2,3,4,5].map(n=>`<button class="star ${n<=state.rating?'on':''}" data-star="${n}">★</button>`).join('')}</div><div class="small" style="color:#b36b00">${['','Muito ruim','Ruim','Bom','Muito bom','Excelente'][state.rating]}</div></div>
-    <div class="field" style="margin-top:11px"><label>Comentário (opcional)</label><textarea id="comment" class="control" placeholder="Conte como foi o atendimento"></textarea></div>
-    <button id="sendRating" class="btn">Enviar avaliação</button>
-  </section>`;
-  document.getElementById('back').onclick=()=>setRoute('records');
-  document.querySelectorAll('[data-star]').forEach(b=>b.onclick=()=>{state.rating=+b.dataset.star;rating()});
-  document.getElementById('sendRating').onclick=()=>{
-    const arr=read(STORE.ratings,[]);arr.push({id:'r'+Date.now(),itemId:i.id,userId:user().id,nota:state.rating,comentario:document.getElementById('comment').value.trim(),createdAt:new Date().toISOString()});write(STORE.ratings,arr);setRoute('records');toast('Avaliação enviada. Obrigado!')
-  }
-}
-
-function profile(){
-  const u=user();
-  const foundCount=read(STORE.items,[]).filter(i=>i.ownerId===u.id);
-  const lostCount=read(STORE.lost,[]).filter(i=>i.userId===u.id);
-  const settings=read(STORE.settings,{notifications:true});
-  const used = new Blob(Object.values(localStorage)).size;
-  const pct=Math.min(100,Math.round(used/5000000*100));
-  app.innerHTML=`
-  <section class="screen">
-    ${statusbar()}
-    <div class="home-head"><h2>Perfil</h2><button id="edit" class="icon-btn">✎</button></div>
-    <div class="card profile-card">${avatarHTML(u,'profile-avatar')}<div><b class="small">${escapeHTML(u.nome)}</b><div class="tiny muted">${escapeHTML(u.email)}</div><div class="tiny link" style="margin-top:3px">${escapeHTML(u.curso||'Aluno')} • ${escapeHTML(u.campus||'Fatec')}</div></div></div>
-    <div class="stats"><div class="stat"><b>${foundCount.length}</b><small>Encontrados</small></div><div class="stat"><b>${lostCount.length}</b><small>Perdidos</small></div><div class="stat"><b>${foundCount.filter(i=>i.status==='Devolvido').length}</b><small>Devolvidos</small></div></div>
-    <div class="menu">
-      <button id="personal">♙ &nbsp; Dados pessoais</button>
-      <button id="changePass">♧ &nbsp; Alterar senha</button>
-      <button id="notifications" class="row between"><span>♢ &nbsp; Notificações</span><span class="switch ${settings.notifications?'on':''}"></span></button>
-      <button id="ratings">☆ &nbsp; Minhas avaliações</button>
-      <button id="help">ⓘ &nbsp; Ajuda e termos de uso</button>
-    </div>
-
-    <div class="demo-tools">
-      <h3>Ferramentas da apresentação</h3>
-      <div class="tiny muted">Uso estimado do armazenamento local: ${pct}%</div>
-      <div class="storage-bar"><span style="width:${pct}%"></span></div>
-      <div class="grid2" style="margin-top:9px">
-        <button class="btn secondary" id="exportData">Exportar backup</button>
-        <label class="btn secondary" style="display:grid;place-items:center;cursor:pointer">Importar backup<input id="importData" type="file" accept="application/json" hidden></label>
-      </div>
-      <div class="grid2" style="margin-top:8px">
-        <button class="btn secondary" id="simulateReturn">Simular devolução</button>
-        <button class="btn secondary" id="installApp">Instalar no celular</button>
-      </div>
-      <button class="btn ghost" id="resetDemo">Restaurar dados de demonstração</button>
-    </div>
-
-    <button class="btn secondary" id="logout" style="margin-top:11px;color:var(--red);border-color:#ffd4d4">Sair da conta</button>
-  </section>`;
-  document.getElementById('edit').onclick=document.getElementById('personal').onclick=()=>setRoute('editProfile');
-  document.getElementById('changePass').onclick=()=>setRoute('changePassword');
-  document.getElementById('notifications').onclick=()=>{settings.notifications=!settings.notifications;write(STORE.settings,settings);profile();toast(settings.notifications?'Notificações ativadas.':'Notificações desativadas.')};
-  document.getElementById('ratings').onclick=()=>toast(`${read(STORE.ratings,[]).filter(r=>r.userId===u.id).length} avaliação(ões) enviada(s).`);
-  document.getElementById('help').onclick=()=>alert('Protótipo acadêmico\n\nOs dados ficam apenas neste navegador e são armazenados em localStorage.');
-  document.getElementById('logout').onclick=()=>{localStorage.removeItem(STORE.session);setRoute('login');toast('Sessão encerrada.')};
-  document.getElementById('exportData').onclick=exportData;
-  document.getElementById('importData').onchange=e=>importBackup(e.target.files[0]);
-  document.getElementById('simulateReturn').onclick=simulateReturn;
-  document.getElementById('installApp').onclick=installApp;
-  document.getElementById('resetDemo').onclick=resetDemo
-}
-function exportData(){
-  const data={version:1,exportedAt:new Date().toISOString(),users:read(STORE.users,[]),items:read(STORE.items,[]),lost:read(STORE.lost,[]),ratings:read(STORE.ratings,[]),claims:read(STORE.claims,[]),drafts:read(STORE.drafts,{}),settings:read(STORE.settings,{})};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='achados-perdidos-backup.json';a.click();URL.revokeObjectURL(a.href);toast('Dados exportados.')
-}
-function simulateReturn(){
-  const u=user(),items=read(STORE.items,[]);
-  const target=items.find(i=>i.ownerId===u.id&&i.status!=='Devolvido');
-  if(!target)return toast('Não há item disponível para simular devolução.');
-  target.status='Devolvido';write(STORE.items,items);profile();toast(`"${target.titulo}" marcado como devolvido.`)
-}
-function resetDemo(){
-  if(!confirm('Isso apagará os dados locais e restaurará a demonstração. Continuar?'))return;
-  Object.values(STORE).forEach(k=>localStorage.removeItem(k));seed();write(STORE.session,'u-demo');setRoute('home');toast('Demonstração restaurada.')
-}
-
-function editProfile(){
-  const u=user(); state.avatarTemp=u.avatar||null;
-  app.innerHTML=`
-  <section class="screen white no-nav">
-    ${statusbar()}
-    <div class="topbar"><button id="back" class="icon-btn">‹</button><h2>Dados pessoais</h2><span></span></div>
-    <div style="display:flex;justify-content:center;margin-bottom:13px"><label class="profile-avatar" style="cursor:pointer">${state.avatarTemp?`<img src="${state.avatarTemp}" alt="">`:initials(u.nome)}<input id="avatarInput" hidden type="file" accept="image/*"></label></div>
-    <div class="tiny muted" style="text-align:center;margin-top:-7px;margin-bottom:12px">Clique na foto para alterar</div>
-    <div class="field"><label>Nome completo</label><input id="pName" class="control" value="${escapeHTML(u.nome)}"></div>
-    <div class="field"><label>E-mail</label><input id="pEmail" class="control" value="${escapeHTML(u.email)}"></div>
-    <div class="field"><label>Telefone</label><input id="pPhone" class="control" value="${escapeHTML(u.telefone||'')}"></div>
-    <div class="grid2"><div class="field"><label>Curso</label><input id="pCourse" class="control" value="${escapeHTML(u.curso||'')}"></div><div class="field"><label>Campus</label><input id="pCampus" class="control" value="${escapeHTML(u.campus||'')}"></div></div>
-    <button id="saveProfile" class="btn">Salvar alterações</button>
-  </section>`;
-  document.getElementById('back').onclick=()=>setRoute('profile');
-  document.getElementById('avatarInput').onchange=async e=>{
-    const f=e.target.files[0];if(!f)return;
-    state.avatarTemp=await compressImage(f,360,.65);editProfile()
-  };
-  document.getElementById('saveProfile').onclick=()=>{
-    const users=read(STORE.users,[]),x=users.find(a=>a.id===u.id),email=document.getElementById('pEmail').value.trim().toLowerCase();
-    if(users.some(a=>a.id!==u.id&&a.email.toLowerCase()===email))return toast('Esse e-mail já está em uso.');
-    x.nome=document.getElementById('pName').value.trim()||x.nome;x.email=email||x.email;x.telefone=document.getElementById('pPhone').value.trim();x.curso=document.getElementById('pCourse').value.trim();x.campus=document.getElementById('pCampus').value.trim();x.avatar=state.avatarTemp;
-    write(STORE.users,users);setRoute('profile');toast('Perfil atualizado.')
-  }
-}
-function changePassword(){
-  const u=user();
-  app.innerHTML=`
-  <section class="screen white no-nav">
-    ${statusbar()}
-    <div class="topbar"><button id="back" class="icon-btn">‹</button><h2>Alterar senha</h2><span></span></div>
-    <div class="field"><label>Senha atual</label>${passwordField('oldPass')}</div>
-    <div class="field"><label>Nova senha</label>${passwordField('newPass')}</div>
-    <div class="field"><label>Confirmar nova senha</label>${passwordField('newConfirm')}</div>
-    <button id="savePass" class="btn">Alterar senha</button>
-  </section>`;
-  bindEyes();
-  document.getElementById('back').onclick=()=>setRoute('profile');
-  document.getElementById('savePass').onclick=()=>{
-    if(document.getElementById('oldPass').value!==u.senha)return toast('Senha atual incorreta.');
-    const np=document.getElementById('newPass').value;
-    if(np.length<4)return toast('A nova senha precisa ter pelo menos 4 caracteres.');
-    if(np!==document.getElementById('newConfirm').value)return toast('As novas senhas não conferem.');
-    const users=read(STORE.users,[]),x=users.find(a=>a.id===u.id);x.senha=np;write(STORE.users,users);setRoute('profile');toast('Senha alterada.')
-  }
-}
-
-
-window.addEventListener('beforeinstallprompt', (e)=>{
-  e.preventDefault();
-  state.installPrompt = e;
-});
-
-async function installApp(){
-  if(!state.installPrompt){
-    toast('No Chrome, use o menu do navegador e escolha “Instalar app” ou “Adicionar à tela inicial”.');
-    return;
-  }
-  state.installPrompt.prompt();
-  try{ await state.installPrompt.userChoice; }catch(e){}
-  state.installPrompt = null;
-}
-
-async function importBackup(file){
-  if(!file) return;
-  try{
-    const txt = await file.text();
-    const data = JSON.parse(txt);
-    if(!Array.isArray(data.users) || !Array.isArray(data.items)) throw new Error('invalid');
-    write(STORE.users,data.users);
-    write(STORE.items,data.items);
-    write(STORE.lost,Array.isArray(data.lost)?data.lost:[]);
-    write(STORE.ratings,Array.isArray(data.ratings)?data.ratings:[]);
-    write(STORE.claims,Array.isArray(data.claims)?data.claims:[]);
-    write(STORE.drafts,data.drafts||{found:{},lost:{}});
-    if(data.settings) write(STORE.settings,data.settings);
-    const current = data.users[0];
-    if(current) write(STORE.session,current.id);
-    toast('Backup importado com sucesso.');
-    setRoute('home');
-  }catch(e){
-    toast('Arquivo de backup inválido.');
-  }
-}
-
-window.addEventListener('popstate',()=>{
-  const h=parseHash();
-  if(h){state.route=h.route;if(h.itemId)state.selectedItem=h.itemId;render()}
-});
-document.addEventListener('DOMContentLoaded',()=>{
-  navigator.storage?.persist?.().catch(()=>{});
-  const h=parseHash();
-  const allowed=['login','register','forgot','home','found','lost','records','detail','rating','profile','editProfile','changePassword'];
-  if(user()){
-    state.route=h&&allowed.includes(h.route)&&!['login','register','forgot'].includes(h.route)?h.route:'home';
-    if(h?.itemId)state.selectedItem=h.itemId;
-  }else state.route='login';
-  history.replaceState({},'',hashFor(state.route,(state.route==='detail'||state.route==='rating')?state.selectedItem:null));
-  render();
-});
+function publicItems(){return get(K.items,[]).filter(i=>i.approval==='Aprovado'&&i.status!=='Devolvido')}
+function itemCard(i){return `<article class="item-card" data-item="${i.id}"><img class="item-photo" src="${esc(itemPhoto(i))}" alt="${esc(i.title)}"><div><div class="item-top"><span class="category">${esc(i.category)}</span><span class="badge ${badgeClass(i.status)}">${esc(i.status)}</span></div><h3>${esc(i.title)}</h3><p>⌖ ${esc(i.local)}</p><p>▣ ${fmt(i.date)} · ${i.holder==='fatec'?'Na FATEC':'Com quem encontrou'}</p></div></article>`}
+function renderHome(){const u=currentUser();const items=publicItems();const returned=get(K.items,[]).filter(i=>i.status==='Devolvido').length;const activeFilters=Object.values(state.filters).filter(Boolean).length;
+ $('#app').innerHTML=appWrap(`<main class="page"> <header class="top-public">${brand()}<div>${u?`<button class="btn secondary sm" data-go="${u.role==='admin'?'#admin':'#profile'}">${u.role==='admin'?'Painel admin':esc(u.name.split(' ')[0])}</button>`:`<button class="btn secondary sm" data-go="#login">Entrar</button>`}</div></header>
+ <section class="hero"><h1>Encontrou ou perdeu algo na Fatec?</h1><p>Consulte os objetos encontrados no campus. Você pode visualizar os itens sem conta; o login só é necessário para entrar em contato ou registrar informações.</p><div class="hero-stats"><div class="hero-stat"><b>${items.length}</b><span>itens disponíveis</span></div><div class="hero-stat"><b>${returned}</b><span>devolvidos</span></div></div></section>
+ <div class="search-row"><input id="public-search" class="field-control" placeholder="Buscar por item, categoria ou local"><button id="open-filter" class="filter-btn">☷${activeFilters?`<span class="filter-count">${activeFilters}</span>`:''}</button></div>
+ <div class="chips" id="cat-chips">${['Todos',...settings().categories].map(c=>`<button class="chip ${state.category===c?'active':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+ <div class="section-head"><h2>Itens encontrados</h2><span id="result-count"></span></div><div id="public-list" class="item-list"></div>
+ </main>${u?.role==='user'?nav('home'):''}`,u?.role==='user'?'user':'public');bindCommon();$('#public-search').oninput=renderPublicList;$('#open-filter').onclick=openPublicFilters;$$('[data-cat]').forEach(b=>b.onclick=()=>{state.category=b.dataset.cat;renderHome()});renderPublicList()}
+function filteredPublic(){const q=norm($('#public-search')?.value||'');return publicItems().filter(i=>{const text=norm(`${i.title} ${i.description} ${i.category} ${i.local}`);return(!q||text.includes(q))&&(state.category==='Todos'||i.category===state.category)&&(!state.filters.status||i.status===state.filters.status)&&(!state.filters.local||i.local===state.filters.local)&&(!state.filters.dateFrom||i.date>=state.filters.dateFrom)&&(!state.filters.dateTo||i.date<=state.filters.dateTo)})}
+function renderPublicList(){const list=$('#public-list');if(!list)return;const arr=filteredPublic();$('#result-count').textContent=`${arr.length} resultado${arr.length===1?'':'s'}`;list.innerHTML=arr.length?arr.map(itemCard).join(''):`<div class="empty"><b>Nenhum item encontrado</b>Tente mudar os filtros ou a busca.</div>`;$$('[data-item]').forEach(e=>e.onclick=()=>go('#item/'+e.dataset.item))}
+function openPublicFilters(){const s=settings();$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Filtros</h3><button class="btn ghost sm" id="clear-filter">Limpar</button></div><div class="field"><label>Status</label><select id="f-status" class="field-control"><option value="">Todos</option><option>Em aberto</option><option>Reservado</option></select></div><div class="field"><label>Local</label><select id="f-local" class="field-control"><option value="">Todos os locais</option>${s.locations.map(x=>`<option ${state.filters.local===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="grid2"><div class="field"><label>De</label><input id="f-from" type="date" class="field-control" value="${state.filters.dateFrom}"></div><div class="field"><label>Até</label><input id="f-to" type="date" class="field-control" value="${state.filters.dateTo}"></div></div><div class="grid2"><button class="btn secondary" id="cancel-filter">Cancelar</button><button class="btn" id="apply-filter">Aplicar filtros</button></div></div></div>`;$('#f-status').value=state.filters.status;$('#cancel-filter').onclick=closeModal;$('#clear-filter').onclick=()=>{state.filters={status:'',local:'',dateFrom:'',dateTo:''};closeModal();renderHome()};$('#apply-filter').onclick=()=>{state.filters={status:$('#f-status').value,local:$('#f-local').value,dateFrom:$('#f-from').value,dateTo:$('#f-to').value};closeModal();renderHome()}}
+function closeModal(){$('#modal-root').innerHTML=''}
+function renderDetail(itemId){const i=get(K.items,[]).find(x=>x.id===itemId&&x.approval==='Aprovado');if(!i)return go('#home');const u=currentUser();const locked=!u;const owner=get(K.users,[]).find(x=>x.id===i.ownerId);const s=settings();const phone=i.holder==='fatec'?s.sectorWhatsapp:owner?.phone;const who=i.holder==='fatec'?'Setor de Achados e Perdidos da FATEC':`Responsável pelo item (${owner?.name?.split(' ')[0]||'usuário'})`;const msg=encodeURIComponent(`Olá! Vi no sistema Achados & Perdidos da Fatec o item “${i.title}” (código ${i.id}). Gostaria de conversar sobre ele.`);const wa=`https://wa.me/${waPhone(phone)}?text=${msg}`;
+ $('#app').innerHTML=appWrap(`<main class="page no-nav"><div class="detail-photo"><img src="${esc(itemPhoto(i))}" alt="${esc(i.title)}"><div class="detail-floating"><button class="icon-btn" data-back>‹</button><button class="icon-btn" id="share-item">↗</button></div></div><div class="item-top"><span class="badge ${badgeClass(i.status)}">${esc(i.status)}</span><span class="category">Código ${esc(i.id)}</span></div><h1 class="detail-title">${esc(i.title)}</h1><p class="detail-desc">${esc(i.description)}</p><div class="info-card"><div class="info-row">Categoria<b>${esc(i.category)}</b></div><div class="info-row">Local onde foi encontrado<b>${esc(i.local)}</b></div><div class="info-row">Data do encontro<b>${fmt(i.date)}</b></div><div class="info-row">Localização atual<b>${i.holder==='fatec'?'Entregue ao setor de Achados e Perdidos da FATEC':'Permanece com quem encontrou'}</b></div></div>
+ <div class="contact-wrap ${locked?'contact-locked':''}"><div class="contact-card"><h3>Entrar em contato</h3><p>${esc(who)}</p><a class="btn full whatsapp" href="${wa}" target="_blank" rel="noopener">● Conversar pelo WhatsApp</a></div>${locked?`<div class="locked-overlay"><div class="lock-box"><div class="lock-icon">⌕</div><b>Faça login para entrar em contato</b><p>Os dados de contato ficam protegidos e só são liberados para usuários autenticados.</p><button class="btn" id="login-contact">Entrar para continuar</button></div></div>`:''}</div></main>`,u?.role==='user'?'user':'public');bindCommon();$('#share-item').onclick=async()=>{const text=`${i.title} — encontrado em ${i.local}`;if(navigator.share)try{await navigator.share({title:'Achados & Perdidos',text,url:location.href})}catch{}else{navigator.clipboard?.writeText(location.href);toast('Link copiado.')}};if(locked)$('#login-contact').onclick=()=>{set(K.pending,'#item/'+i.id);go('#login')}}
+function passwordInput(id,placeholder='••••••••'){return `<div class="password-wrap"><input id="${id}" class="field-control" type="password" placeholder="${placeholder}"><button type="button" class="eye" data-eye="${id}">◉</button></div>`}function bindEyes(){$$('[data-eye]').forEach(b=>b.onclick=()=>{const x=$('#'+b.dataset.eye);x.type=x.type==='password'?'text':'password'})}
+function renderLogin(){const pending=get(K.pending,'');$('#app').innerHTML=appWrap(`<main class="page white no-nav"><div class="topbar"><button class="icon-btn" data-back>‹</button><h2>Entrar</h2><span></span></div><div class="auth-box"><div class="auth-header"><div class="brand-mark">⌑</div><h1>Bem-vindo de volta</h1><p>${pending.startsWith('#item/')?'Entre para liberar o contato do responsável pelo item.':'Acesse sua conta de usuário ou administrador.'}</p></div><div class="field"><label>E-mail</label><input id="login-email" class="field-control" type="email" autocomplete="email" placeholder="seu@email.com"></div><div class="field"><label>Senha</label>${passwordInput('login-pass')}</div><div style="display:flex;justify-content:flex-end;margin:-3px 0 11px"><button class="btn ghost sm" data-go="#forgot">Esqueci minha senha</button></div><button id="login-submit" class="btn full">Entrar</button><div class="auth-note">Não tem conta? <button class="btn ghost sm" data-go="#register">Cadastre-se</button></div><div class="role-hint"><div class="demo-login"><b>Usuário</b>ana.rocha@fatec.sp.gov.br<br>Senha: 1234</div><div class="demo-login"><b>Administrador</b>admin@fatec.sp.gov.br<br>Senha: admin123</div></div></div></main>`);bindCommon();bindEyes();$('#login-submit').onclick=async()=>{const email=norm($('#login-email').value),ph=await hashPassword($('#login-pass').value);const u=get(K.users,[]).find(x=>norm(x.email)===email&&x.passwordHash===ph&&x.active!==false);if(!u)return toast('E-mail ou senha inválidos.');set(K.session,u.id);const dest=get(K.pending,'');localStorage.removeItem(K.pending);if(u.role==='admin')go('#admin');else go(dest||'#home');toast(`Olá, ${u.name.split(' ')[0]}!`)}}
+function renderRegister(){$('#app').innerHTML=appWrap(`<main class="page white no-nav"><div class="topbar"><button class="icon-btn" data-back>‹</button><h2>Criar conta</h2><span></span></div><div class="auth-box"><div class="field"><label>Nome completo</label><input id="r-name" class="field-control"></div><div class="field"><label>E-mail</label><input id="r-email" class="field-control" type="email"></div><div class="field"><label>Telefone / WhatsApp</label><input id="r-phone" class="field-control" placeholder="(16) 99999-9999"></div><div class="field"><label>Senha</label>${passwordInput('r-pass','Mínimo 4 caracteres')}</div><div class="field"><label>Confirmar senha</label>${passwordInput('r-confirm','Repita a senha')}</div><label style="display:flex;gap:7px;font-size:8.5px;margin:5px 0 13px"><input id="r-terms" type="checkbox"> Li e aceito os termos de uso e a política de privacidade.</label><button id="r-submit" class="btn full">Criar conta</button><div class="auth-note">Já tem conta? <button class="btn ghost sm" data-go="#login">Entrar</button></div></div></main>`);bindCommon();bindEyes();$('#r-submit').onclick=async()=>{const name=$('#r-name').value.trim(),email=norm($('#r-email').value),phone=$('#r-phone').value.trim(),pass=$('#r-pass').value;if(!name||!email||!phone||!pass)return toast('Preencha todos os campos.');if(!email.includes('@'))return toast('Informe um e-mail válido.');if(pass.length<4)return toast('Use pelo menos 4 caracteres na senha.');if(pass!==$('#r-confirm').value)return toast('As senhas não conferem.');if(!$('#r-terms').checked)return toast('Aceite os termos para continuar.');const users=get(K.users,[]);if(users.some(x=>norm(x.email)===email))return toast('Este e-mail já está cadastrado.');const u={id:id('u-'),name,email,phone,passwordHash:await hashPassword(pass),role:'user',active:true,course:'',createdAt:today()};users.push(u);set(K.users,users);set(K.session,u.id);const dest=get(K.pending,'');localStorage.removeItem(K.pending);go(dest||'#home');toast('Conta criada com sucesso.')}}
+function renderForgot(){$('#app').innerHTML=appWrap(`<main class="page white no-nav"><div class="topbar"><button class="icon-btn" data-back>‹</button><h2>Recuperar senha</h2><span></span></div><div class="auth-box"><div class="notice amber">Como esta versão roda somente no navegador/GitHub Pages, não existe envio real de e-mail. Para a apresentação, você pode redefinir a senha localmente.</div><div class="field" style="margin-top:12px"><label>E-mail cadastrado</label><input id="f-email" class="field-control" type="email"></div><div class="field"><label>Nova senha</label>${passwordInput('f-pass')}</div><button id="f-submit" class="btn full">Redefinir senha</button></div></main>`);bindCommon();bindEyes();$('#f-submit').onclick=async()=>{const users=get(K.users,[]),u=users.find(x=>norm(x.email)===norm($('#f-email').value));if(!u)return toast('E-mail não encontrado.');const p=$('#f-pass').value;if(p.length<4)return toast('Use pelo menos 4 caracteres.');u.passwordHash=await hashPassword(p);set(K.users,users);toast('Senha redefinida.');go('#login')}}
+async function compress(file,max=900,q=.7){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const sc=Math.min(1,max/Math.max(im.width,im.height)),w=Math.round(im.width*sc),h=Math.round(im.height*sc),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);res(c.toDataURL('image/jpeg',q))};im.onerror=rej;im.src=r.result};r.onerror=rej;r.readAsDataURL(file)})}
+function photoUploader(){return `<div class="photo-grid" id="photo-grid">${state.photos.map((p,n)=>`<div class="photo-slot"><img src="${p}"><button class="photo-remove" data-rm="${n}">×</button></div>`).join('')}${state.photos.length<3?`<label class="photo-slot photo-add"><span>▧</span>Adicionar foto<input id="photo-input" type="file" accept="image/*" capture="environment" multiple hidden></label>`:''}</div>`}
+function refreshPhotoGrid(){const grid=$('#photo-grid');if(!grid)return;grid.outerHTML=photoUploader();bindPhoto()}function bindPhoto(){const inp=$('#photo-input');if(inp)inp.onchange=async e=>{for(const f of [...e.target.files]){if(state.photos.length>=3)break;if(f.type.startsWith('image/'))state.photos.push(await compress(f))}refreshPhotoGrid()};$$('[data-rm]').forEach(b=>b.onclick=()=>{state.photos.splice(+b.dataset.rm,1);refreshPhotoGrid()})}
+function ensureUserRoute(){const u=currentUser();if(!u||u.role!=='user'){set(K.pending,route());go('#login');return false}return true}
+function renderFound(){if(!ensureUserRoute())return;const s=settings();$('#app').innerHTML=appWrap(`<main class="page"><div class="topbar"><button class="icon-btn" data-back>‹</button><h2>Registrar item encontrado</h2><span></span></div><div class="form-card"><div class="field"><label>Fotos do item (até 3)</label>${photoUploader()}</div><div class="field"><label>Título do item</label><input id="i-title" class="field-control" placeholder="Ex.: Garrafa térmica azul"></div><div class="field"><label>Descrição</label><textarea id="i-desc" class="field-control" placeholder="Cor, marca, detalhes e estado do item"></textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="i-cat" class="field-control">${s.categories.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Data do encontro</label><input id="i-date" class="field-control" type="date" value="${today()}"></div></div><div class="field"><label>Local onde foi encontrado</label><select id="i-local" class="field-control">${s.locations.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Onde o item está agora?</label><select id="i-holder" class="field-control"><option value="finder">Está comigo</option><option value="fatec">Entreguei na FATEC</option></select></div><div class="notice">O registro ficará pendente de aprovação do administrador antes de aparecer publicamente.</div><button id="i-save" class="btn full" style="margin-top:11px">Enviar registro</button></div></main>${nav('found')}`,'user');bindCommon();bindPhoto();$('#i-save').onclick=saveFound}
+function duplicateItem(candidate){return get(K.items,[]).some(i=>norm(i.title)===norm(candidate.title)&&i.category===candidate.category&&i.date===candidate.date&&i.local===candidate.local&&i.status!=='Devolvido')}
+function saveFound(){const c={title:$('#i-title').value.trim(),description:$('#i-desc').value.trim(),category:$('#i-cat').value,date:$('#i-date').value,local:$('#i-local').value,holder:$('#i-holder').value};if(!c.title||!c.description||!c.date)return toast('Preencha título, descrição e data.');if(!state.photos.length)return toast('Adicione pelo menos uma foto do item.');if(duplicateItem(c))return toast('Já existe um registro idêntico. Evitamos duplicidades.');const arr=get(K.items,[]);arr.unshift({id:id('item-'),ownerId:currentUser().id,...c,status:'Em aberto',approval:settings().requireApproval?'Pendente':'Aprovado',photos:[...state.photos],createdAt:new Date().toISOString()});set(K.items,arr);state.photos=[];toast('Item registrado e enviado para análise.');go('#records')}
+function renderLost(){if(!ensureUserRoute())return;const s=settings();$('#app').innerHTML=appWrap(`<main class="page"><div class="topbar"><button class="icon-btn" data-back>‹</button><h2>Registrar item perdido</h2><span></span></div><div class="notice">Descreva o item com detalhes para facilitar uma possível correspondência com os objetos encontrados.</div><div class="form-card" style="margin-top:10px"><div class="field"><label>O que você perdeu?</label><input id="l-title" class="field-control"></div><div class="field"><label>Descrição</label><textarea id="l-desc" class="field-control"></textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="l-cat" class="field-control">${s.categories.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Data aproximada</label><input id="l-date" class="field-control" type="date"></div></div><div class="field"><label>Local aproximado (opcional)</label><select id="l-local" class="field-control"><option value="">Não sei</option>${s.locations.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><button id="l-save" class="btn full">Registrar solicitação</button></div></main>${nav('lost')}`,'user');bindCommon();$('#l-save').onclick=saveLost}
+function saveLost(){const title=$('#l-title').value.trim(),description=$('#l-desc').value.trim(),category=$('#l-cat').value,date=$('#l-date').value,local=$('#l-local').value;if(!title||!description||!date)return toast('Preencha título, descrição e data aproximada.');const arr=get(K.lost,[]);arr.unshift({id:id('lost-'),userId:currentUser().id,title,description,category,date,local,status:'Em busca',createdAt:new Date().toISOString()});set(K.lost,arr);toast('Item perdido registrado.');go('#records')}
+function renderRecords(){if(!ensureUserRoute())return;const u=currentUser(),items=get(K.items,[]).filter(i=>i.ownerId===u.id),lost=get(K.lost,[]).filter(i=>i.userId===u.id),ratings=get(K.ratings,[]);let body='';if(state.recordsTab==='found')body=items.map(i=>`<div class="record-card"><div class="record-main"><img src="${esc(itemPhoto(i))}"><div><span class="category">Você encontrou · ${esc(i.category)}</span><h3>${esc(i.title)}</h3><p>${esc(i.local)} · ${fmt(i.date)}</p></div><div><span class="badge ${badgeClass(i.approval==='Pendente'?'Pendente':i.status)}">${i.approval==='Pendente'?'Aguardando aprovação':esc(i.status)}</span></div></div><div class="record-actions">${i.approval==='Aprovado'?`<button class="btn secondary sm" data-go="#item/${i.id}">Ver detalhes</button>`:''}${settings().allowDirectReturn&&i.holder==='finder'&&i.status!=='Devolvido'&&i.approval==='Aprovado'?`<button class="btn success sm" data-direct-return="${i.id}">Registrar devolução</button>`:''}${i.status==='Devolvido'&&!ratings.some(r=>r.itemId===i.id&&r.userId===u.id)?`<button class="btn sm" data-rate="${i.id}">Avaliar devolução</button>`:''}</div></div>`).join('');else body=lost.map(l=>`<div class="record-card"><div class="record-main"><div class="avatar">?</div><div><span class="category">Você perdeu · ${esc(l.category)}</span><h3>${esc(l.title)}</h3><p>${esc(l.local||'Local não informado')} · ${fmt(l.date)}</p></div><span class="badge open">${esc(l.status)}</span></div></div>`).join('');$('#app').innerHTML=appWrap(`<main class="page"><div class="section-head"><h2>Meus registros</h2><span>${items.length+lost.length} no total</span></div><div class="tabs"><button class="${state.recordsTab==='found'?'active':''}" data-tab="found">Encontrei</button><button class="${state.recordsTab==='lost'?'active':''}" data-tab="lost">Perdi</button><button data-go="#home">Explorar</button></div>${body||`<div class="empty"><b>Nenhum registro ainda</b>Use os botões abaixo para começar.</div>`}</main>${nav('records')}`,'user');bindCommon();$$('[data-tab]').forEach(b=>b.onclick=()=>{state.recordsTab=b.dataset.tab;renderRecords()});$$('[data-direct-return]').forEach(b=>b.onclick=()=>openReturnModal(b.dataset.directReturn,false));$$('[data-rate]').forEach(b=>b.onclick=()=>openRatingModal(b.dataset.rate))}
+function openReturnModal(itemId,byAdmin=true){const i=get(K.items,[]).find(x=>x.id===itemId);if(!i)return;$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Registrar devolução</h3><button class="btn ghost sm" id="m-close">Fechar</button></div><div class="notice green">${esc(i.title)} · ${esc(i.local)}</div><div class="field" style="margin-top:10px"><label>Nome do proprietário</label><input id="ret-name" class="field-control"></div><div class="field"><label>Telefone do proprietário</label><input id="ret-phone" class="field-control"></div><div class="grid2"><div class="field"><label>Data da devolução</label><input id="ret-date" class="field-control" type="date" value="${today()}"></div><div class="field"><label>Documento/identificação (opcional)</label><input id="ret-doc" class="field-control"></div></div><div class="field"><label>Observações</label><textarea id="ret-notes" class="field-control"></textarea></div><button id="ret-save" class="btn full">Confirmar devolução</button></div></div>`;$('#m-close').onclick=closeModal;$('#ret-save').onclick=()=>{if(!$('#ret-name').value.trim())return toast('Informe o nome do proprietário.');const returns=get(K.returns,[]),items=get(K.items,[]),x=items.find(a=>a.id===itemId);returns.unshift({id:id('ret-'),itemId,ownerName:$('#ret-name').value.trim(),ownerPhone:$('#ret-phone').value.trim(),document:$('#ret-doc').value.trim(),date:$('#ret-date').value,notes:$('#ret-notes').value.trim(),registeredBy:currentUser().id,method:byAdmin?'FATEC':'Direta',createdAt:new Date().toISOString()});x.status='Devolvido';x.returnDate=$('#ret-date').value;set(K.returns,returns);set(K.items,items);closeModal();toast('Devolução registrada.');isAdmin()?renderAdmin():renderRecords()}}
+function openRatingModal(itemId){$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Avaliar devolução</h3><button class="btn ghost sm" id="m-close">Fechar</button></div><div class="field"><label>Nota</label><select id="rate-score" class="field-control"><option value="5">★★★★★ Excelente</option><option value="4">★★★★☆ Muito bom</option><option value="3">★★★☆☆ Bom</option><option value="2">★★☆☆☆ Ruim</option><option value="1">★☆☆☆☆ Muito ruim</option></select></div><div class="field"><label>Comentário</label><textarea id="rate-comment" class="field-control"></textarea></div><button id="rate-save" class="btn full">Enviar avaliação</button></div></div>`;$('#m-close').onclick=closeModal;$('#rate-save').onclick=()=>{const arr=get(K.ratings,[]);arr.push({id:id('rate-'),itemId,userId:currentUser().id,score:+$('#rate-score').value,comment:$('#rate-comment').value.trim(),createdAt:new Date().toISOString()});set(K.ratings,arr);closeModal();toast('Avaliação enviada.');renderRecords()}}
+function renderProfile(){if(!ensureUserRoute())return;const u=currentUser(),items=get(K.items,[]).filter(i=>i.ownerId===u.id),lost=get(K.lost,[]).filter(i=>i.userId===u.id);$('#app').innerHTML=appWrap(`<main class="page"><div class="section-head"><h2>Perfil</h2><span>Conta de usuário</span></div><div class="profile-card"><div class="avatar">${esc(u.name.split(' ').map(x=>x[0]).slice(0,2).join(''))}</div><div><b>${esc(u.name)}</b><p>${esc(u.email)}</p><p>${esc(u.phone)}</p></div></div><div class="stats"><div class="stat"><b>${items.length}</b><span>Encontrados</span></div><div class="stat"><b>${lost.length}</b><span>Perdidos</span></div><div class="stat"><b>${items.filter(i=>i.status==='Devolvido').length}</b><span>Devolvidos</span></div></div><div class="menu"><button id="edit-profile">Dados pessoais</button><button id="change-pass">Alterar senha</button><button id="my-ratings">Minhas avaliações</button><button id="export-data">Exportar meus dados</button></div><button id="logout" class="btn secondary full" style="margin-top:11px;color:var(--red)">Sair da conta</button></main>${nav('profile')}`,'user');bindCommon();$('#logout').onclick=()=>{localStorage.removeItem(K.session);go('#home');toast('Você saiu da conta.')};$('#edit-profile').onclick=openEditProfile;$('#change-pass').onclick=openChangePassword;$('#my-ratings').onclick=()=>toast(`${get(K.ratings,[]).filter(r=>r.userId===u.id).length} avaliação(ões) enviada(s).`);$('#export-data').onclick=()=>exportUserData(u.id)}
+function openEditProfile(){const u=currentUser();$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Dados pessoais</h3><button class="btn ghost sm" id="m-close">Fechar</button></div><div class="field"><label>Nome</label><input id="ep-name" class="field-control" value="${esc(u.name)}"></div><div class="field"><label>Telefone / WhatsApp</label><input id="ep-phone" class="field-control" value="${esc(u.phone)}"></div><button id="ep-save" class="btn full">Salvar</button></div></div>`;$('#m-close').onclick=closeModal;$('#ep-save').onclick=()=>{const users=get(K.users,[]),x=users.find(a=>a.id===u.id);x.name=$('#ep-name').value.trim()||x.name;x.phone=$('#ep-phone').value.trim();set(K.users,users);closeModal();renderProfile();toast('Perfil atualizado.')}}
+function openChangePassword(){const u=currentUser();$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Alterar senha</h3><button class="btn ghost sm" id="m-close">Fechar</button></div><div class="field"><label>Senha atual</label>${passwordInput('cp-old')}</div><div class="field"><label>Nova senha</label>${passwordInput('cp-new')}</div><button id="cp-save" class="btn full">Alterar senha</button></div></div>`;$('#m-close').onclick=closeModal;bindEyes();$('#cp-save').onclick=async()=>{if(await hashPassword($('#cp-old').value)!==u.passwordHash)return toast('Senha atual incorreta.');if($('#cp-new').value.length<4)return toast('A nova senha é muito curta.');const users=get(K.users,[]),x=users.find(a=>a.id===u.id);x.passwordHash=await hashPassword($('#cp-new').value);set(K.users,users);closeModal();toast('Senha alterada.')}}
+function exportUserData(uid){const data={user:get(K.users,[]).find(u=>u.id===uid),items:get(K.items,[]).filter(i=>i.ownerId===uid),lost:get(K.lost,[]).filter(i=>i.userId===uid),ratings:get(K.ratings,[]).filter(r=>r.userId===uid)};downloadJSON(data,'meus-dados-achados-perdidos.json')}
+function downloadJSON(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+/* ADMIN */
+const adminSections=[['overview','Visão geral','⌂'],['found','Itens encontrados','▤'],['lost','Itens perdidos','⌕'],['history','Histórico','↻'],['users','Usuários','○'],['settings','Configurações','⚙']];
+function adminLayout(content){const u=currentUser();return appWrap(`<aside class="admin-sidebar"><div class="admin-brand">${brand()}<button class="btn secondary sm" data-go="#home">Ver site</button></div><nav class="admin-menu">${adminSections.map(([k,l,ic])=>`<button class="${state.adminSection===k?'active':''}" data-admin="${k}">${ic} &nbsp; ${l}</button>`).join('')}</nav><div class="admin-user"><b>${esc(u.name)}</b><span>Administrador</span><button id="admin-logout" class="btn ghost sm" style="padding-left:0">Sair</button></div></aside><main class="admin-main">${content}</main>`,'admin')}
+function requireAdmin(){if(!isAdmin()){set(K.pending,'#admin');go('#login');return false}return true}
+function renderAdmin(section){if(!requireAdmin())return;if(section)state.adminSection=section;const fn={overview:adminOverview,found:adminFound,lost:adminLost,history:adminHistory,users:adminUsers,settings:adminSettings}[state.adminSection]||adminOverview;$('#app').innerHTML=adminLayout(fn());bindAdminBase();({overview:bindAdminOverview,found:bindAdminFound,lost:bindAdminLost,history:bindAdminHistory,users:bindAdminUsers,settings:bindAdminSettings}[state.adminSection]||(()=>{}))()}
+function bindAdminBase(){$$('[data-admin]').forEach(b=>b.onclick=()=>{state.adminSection=b.dataset.admin;go('#admin/'+state.adminSection)});$$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));$('#admin-logout').onclick=()=>{localStorage.removeItem(K.session);go('#home');toast('Sessão administrativa encerrada.')}}
+function adminHeader(title,sub,button=''){return `<header class="admin-header"><div><h1>${title}</h1><p>${sub}</p></div><div class="admin-actions">${button}<button class="btn secondary sm" data-go="#home">Abrir site público</button></div></header>`}
+function adminOverview(){const items=get(K.items,[]),lost=get(K.lost,[]),returns=get(K.returns,[]),pending=items.filter(i=>i.approval==='Pendente'),approved=items.filter(i=>i.approval==='Aprovado'),cats=settings().categories;const recent=[...items.map(i=>({type:'item',date:i.createdAt,title:i.title,text:`${i.category} · ${i.local}`})),...returns.map(r=>({type:'return',date:r.createdAt,title:'Devolução registrada',text:get(K.items,[]).find(i=>i.id===r.itemId)?.title||r.itemId}))].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,5);const max=Math.max(1,...cats.map(c=>approved.filter(i=>i.category===c).length));return `${adminHeader('Visão geral','Acompanhe os registros e pendências do sistema.',`<button class="btn sm" id="admin-new">+ Novo registro</button>`)}<section class="kpis"><div class="kpi"><span>Itens encontrados</span><b>${approved.length}</b></div><div class="kpi"><span>Pendentes de aprovação</span><b>${pending.length}</b></div><div class="kpi"><span>Itens perdidos</span><b>${lost.filter(l=>l.status!=='Encerrado').length}</b></div><div class="kpi"><span>Devoluções</span><b>${returns.length}</b></div></section><div class="admin-grid"><section class="panel"><div class="panel-head"><h2>Itens por categoria</h2><span class="category">Encontrados / devolvidos</span></div><div class="bar-chart">${cats.slice(0,6).map(c=>{const a=approved.filter(i=>i.category===c).length,r=approved.filter(i=>i.category===c&&i.status==='Devolvido').length;return `<div class="bar-group"><div class="bar found" style="height:${Math.max(4,a/max*145)}px"></div><div class="bar returned" style="height:${Math.max(3,r/max*145)}px"></div><span class="bar-label">${esc(c.split(' ')[0])}</span></div>`}).join('')}</div></section><section class="panel"><div class="panel-head"><h2>Atividade recente</h2></div><div class="activity">${recent.map(x=>`<div class="activity-item"><div class="activity-icon">${x.type==='return'?'✓':'▤'}</div><div><b>${esc(x.title)}</b><p>${esc(x.text)}</p></div><time>${String(x.date||'').slice(0,10)}</time></div>`).join('')||'<div class="empty">Sem atividade.</div>'}</div></section></div>${pending.length?`<section class="panel" style="margin-top:12px"><div class="panel-head"><h2>Pendências de aprovação</h2><button class="btn ghost sm" data-admin="found">Ver todos</button></div><div class="activity">${pending.slice(0,4).map(i=>`<div class="activity-item"><img src="${esc(itemPhoto(i))}" style="width:28px;height:28px;border-radius:8px;object-fit:cover"><div><b>${esc(i.title)}</b><p>${esc(i.local)} · ${esc(i.category)}</p></div><button class="btn success sm" data-approve="${i.id}">Aprovar</button></div>`).join('')}</div></section>`:''}`}
+function bindAdminOverview(){$('#admin-new').onclick=()=>openAdminItemEditor();$$('[data-approve]').forEach(b=>b.onclick=()=>adminApproval(b.dataset.approve,'Aprovado'));$$('[data-admin]').forEach(b=>b.onclick=()=>{state.adminSection=b.dataset.admin;go('#admin/'+state.adminSection)})}
+function adminFound(){let arr=get(K.items,[]);const q=norm(state.adminSearch);if(q)arr=arr.filter(i=>norm(`${i.title} ${i.category} ${i.local}`).includes(q));if(state.adminStatus)arr=arr.filter(i=>(state.adminStatus==='Pendente'?i.approval==='Pendente':i.status===state.adminStatus));return `${adminHeader('Itens encontrados','Aprove, edite, altere o status, registre devoluções ou remova registros.',`<button class="btn sm" id="admin-new">+ Novo registro</button>`)}<div class="admin-filter"><input id="admin-search" class="field-control" placeholder="Buscar item..." value="${esc(state.adminSearch)}"><select id="admin-status" class="field-control"><option value="">Todos os status</option><option>Pendente</option><option>Em aberto</option><option>Reservado</option><option>Devolvido</option></select></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Categoria</th><th>Local</th><th>Data</th><th>Posse atual</th><th>Aprovação</th><th>Status</th><th>Ações</th></tr></thead><tbody>${arr.map(i=>`<tr><td><div class="table-item"><img src="${esc(itemPhoto(i))}"><b>${esc(i.title)}</b></div></td><td>${esc(i.category)}</td><td>${esc(i.local)}</td><td>${fmt(i.date)}</td><td>${i.holder==='fatec'?'FATEC':'Usuário'}</td><td><span class="badge ${i.approval==='Pendente'?'pending':i.approval==='Rejeitado'?'rejected':'open'}">${esc(i.approval)}</span></td><td><span class="badge ${badgeClass(i.status)}">${esc(i.status)}</span></td><td><div class="table-actions">${i.approval==='Pendente'?`<button title="Aprovar" class="mini-btn success" data-approve="${i.id}">✓</button><button title="Rejeitar" class="mini-btn danger" data-reject="${i.id}">×</button>`:''}<button title="Editar" class="mini-btn" data-edit="${i.id}">✎</button>${i.status!=='Devolvido'?`<button title="Registrar devolução" class="mini-btn success" data-return="${i.id}">↻</button>`:''}<button title="Excluir" class="mini-btn danger" data-delete="${i.id}">⌫</button></div></td></tr>`).join('')||`<tr><td colspan="8">Nenhum registro.</td></tr>`}</tbody></table></div>`}
+function bindAdminFound(){$('#admin-new').onclick=()=>openAdminItemEditor();$('#admin-status').value=state.adminStatus;$('#admin-search').oninput=e=>{state.adminSearch=e.target.value;renderAdmin('found')};$('#admin-status').onchange=e=>{state.adminStatus=e.target.value;renderAdmin('found')};$$('[data-approve]').forEach(b=>b.onclick=()=>adminApproval(b.dataset.approve,'Aprovado'));$$('[data-reject]').forEach(b=>b.onclick=()=>adminApproval(b.dataset.reject,'Rejeitado'));$$('[data-edit]').forEach(b=>b.onclick=()=>openAdminItemEditor(b.dataset.edit));$$('[data-return]').forEach(b=>b.onclick=()=>openReturnModal(b.dataset.return,true));$$('[data-delete]').forEach(b=>b.onclick=()=>adminDeleteItem(b.dataset.delete))}
+function adminApproval(itemId,status){const arr=get(K.items,[]),i=arr.find(x=>x.id===itemId);if(i){i.approval=status;set(K.items,arr);toast(status==='Aprovado'?'Registro aprovado.':'Registro rejeitado.');renderAdmin(state.adminSection)}}
+function adminDeleteItem(itemId){if(!confirm('Excluir este registro permanentemente?'))return;set(K.items,get(K.items,[]).filter(i=>i.id!==itemId));toast('Registro excluído.');renderAdmin('found')}
+function openAdminItemEditor(itemId){const s=settings(),items=get(K.items,[]),i=items.find(x=>x.id===itemId)||{title:'',description:'',category:s.categories[0],date:today(),local:s.locations[0],holder:'fatec',status:'Em aberto',approval:'Aprovado',photos:[]};$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>${itemId?'Editar registro':'Novo registro'}</h3><button id="m-close" class="btn ghost sm">Fechar</button></div><div class="field"><label>Título</label><input id="ae-title" class="field-control" value="${esc(i.title)}"></div><div class="field"><label>Descrição</label><textarea id="ae-desc" class="field-control">${esc(i.description)}</textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="ae-cat" class="field-control">${s.categories.map(x=>`<option ${x===i.category?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Data</label><input id="ae-date" class="field-control" type="date" value="${i.date}"></div></div><div class="grid2"><div class="field"><label>Local</label><select id="ae-local" class="field-control">${s.locations.map(x=>`<option ${x===i.local?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Posse atual</label><select id="ae-holder" class="field-control"><option value="fatec" ${i.holder==='fatec'?'selected':''}>FATEC</option><option value="finder" ${i.holder==='finder'?'selected':''}>Usuário</option></select></div></div><div class="grid2"><div class="field"><label>Status</label><select id="ae-status" class="field-control"><option ${i.status==='Em aberto'?'selected':''}>Em aberto</option><option ${i.status==='Reservado'?'selected':''}>Reservado</option><option ${i.status==='Devolvido'?'selected':''}>Devolvido</option></select></div><div class="field"><label>Aprovação</label><select id="ae-approval" class="field-control"><option ${i.approval==='Aprovado'?'selected':''}>Aprovado</option><option ${i.approval==='Pendente'?'selected':''}>Pendente</option><option ${i.approval==='Rejeitado'?'selected':''}>Rejeitado</option></select></div></div><button id="ae-save" class="btn full">Salvar registro</button></div></div>`;$('#m-close').onclick=closeModal;$('#ae-save').onclick=()=>{const title=$('#ae-title').value.trim();if(!title)return toast('Informe o título.');if(itemId){Object.assign(i,{title,description:$('#ae-desc').value.trim(),category:$('#ae-cat').value,date:$('#ae-date').value,local:$('#ae-local').value,holder:$('#ae-holder').value,status:$('#ae-status').value,approval:$('#ae-approval').value})}else items.unshift({id:id('item-'),ownerId:currentUser().id,title,description:$('#ae-desc').value.trim(),category:$('#ae-cat').value,date:$('#ae-date').value,local:$('#ae-local').value,holder:$('#ae-holder').value,status:$('#ae-status').value,approval:$('#ae-approval').value,photos:[],createdAt:new Date().toISOString()});set(K.items,items);closeModal();toast('Registro salvo.');renderAdmin('found')}}
+function adminLost(){const users=get(K.users,[]);const arr=get(K.lost,[]);return `${adminHeader('Itens perdidos','Solicitações registradas pelos usuários.',`<button class="btn secondary sm" id="export-lost">Exportar</button>`)}<div class="table-wrap"><table><thead><tr><th>Item</th><th>Usuário</th><th>Categoria</th><th>Data aprox.</th><th>Local</th><th>Status</th><th>Ações</th></tr></thead><tbody>${arr.map(l=>{const u=users.find(x=>x.id===l.userId);return `<tr><td><b>${esc(l.title)}</b><br><span class="category">${esc(l.description.slice(0,45))}</span></td><td>${esc(u?.name||'Usuário')}</td><td>${esc(l.category)}</td><td>${fmt(l.date)}</td><td>${esc(l.local||'-')}</td><td><span class="badge open">${esc(l.status)}</span></td><td><div class="table-actions"><button class="mini-btn" title="Editar" data-lost-edit="${l.id}">✎</button><button class="mini-btn" title="Alternar status" data-lost-status="${l.id}">✓</button><button class="mini-btn danger" title="Excluir" data-lost-delete="${l.id}">⌫</button></div></td></tr>`}).join('')||`<tr><td colspan="7">Nenhum item perdido registrado.</td></tr>`}</tbody></table></div>`}
+function bindAdminLost(){$('#export-lost').onclick=()=>downloadJSON(get(K.lost,[]),'itens-perdidos.json');$$('[data-lost-edit]').forEach(b=>b.onclick=()=>openLostEditor(b.dataset.lostEdit));$$('[data-lost-status]').forEach(b=>b.onclick=()=>{const arr=get(K.lost,[]),x=arr.find(l=>l.id===b.dataset.lostStatus);x.status=x.status==='Encerrado'?'Em busca':'Encerrado';set(K.lost,arr);renderAdmin('lost')});$$('[data-lost-delete]').forEach(b=>b.onclick=()=>{if(confirm('Excluir esta solicitação?')){set(K.lost,get(K.lost,[]).filter(l=>l.id!==b.dataset.lostDelete));renderAdmin('lost')}})}
+function openLostEditor(lostId){const s=settings(),arr=get(K.lost,[]),l=arr.find(x=>x.id===lostId);if(!l)return;$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Editar item perdido</h3><button id="m-close" class="btn ghost sm">Fechar</button></div><div class="field"><label>Título</label><input id="le-title" class="field-control" value="${esc(l.title)}"></div><div class="field"><label>Descrição</label><textarea id="le-desc" class="field-control">${esc(l.description)}</textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="le-cat" class="field-control">${s.categories.map(x=>`<option ${x===l.category?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Data</label><input id="le-date" class="field-control" type="date" value="${l.date}"></div></div><div class="field"><label>Local</label><select id="le-local" class="field-control"><option value="">Não informado</option>${s.locations.map(x=>`<option ${x===l.local?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Status</label><select id="le-status" class="field-control"><option ${l.status==='Em busca'?'selected':''}>Em busca</option><option ${l.status==='Encerrado'?'selected':''}>Encerrado</option></select></div><button id="le-save" class="btn full">Salvar alterações</button></div></div>`;$('#m-close').onclick=closeModal;$('#le-save').onclick=()=>{l.title=$('#le-title').value.trim()||l.title;l.description=$('#le-desc').value.trim();l.category=$('#le-cat').value;l.date=$('#le-date').value;l.local=$('#le-local').value;l.status=$('#le-status').value;set(K.lost,arr);closeModal();toast('Registro atualizado.');renderAdmin('lost')}}
+function adminHistory(){const returns=get(K.returns,[]),items=get(K.items,[]),ratings=get(K.ratings,[]),notReturned=items.filter(i=>i.approval==='Aprovado'&&i.status!=='Devolvido');return `${adminHeader('Histórico','Consulte itens devolvidos e ainda não devolvidos.',`<button class="btn secondary sm" id="export-history">Exportar histórico</button>`)}<section class="kpis"><div class="kpi"><span>Devolvidos</span><b>${returns.length}</b></div><div class="kpi"><span>Não devolvidos</span><b>${notReturned.length}</b></div><div class="kpi"><span>Avaliações</span><b>${ratings.length}</b></div><div class="kpi"><span>Média de avaliação</span><b>${ratings.length?(ratings.reduce((a,r)=>a+r.score,0)/ratings.length).toFixed(1):'-'}</b></div></section><div class="table-wrap"><table><thead><tr><th>Item</th><th>Proprietário</th><th>Data devolução</th><th>Método</th><th>Responsável registro</th><th>Avaliação</th></tr></thead><tbody>${returns.map(r=>{const i=items.find(x=>x.id===r.itemId),rate=ratings.find(x=>x.itemId===r.itemId),reg=get(K.users,[]).find(u=>u.id===r.registeredBy);return `<tr><td>${esc(i?.title||r.itemId)}</td><td>${esc(r.ownerName)}</td><td>${fmt(r.date)}</td><td>${esc(r.method)}</td><td>${esc(reg?.name||'-')}</td><td>${rate?'★'.repeat(rate.score):'-'}</td></tr>`}).join('')||`<tr><td colspan="6">Nenhuma devolução registrada.</td></tr>`}</tbody></table></div><section class="panel" style="margin-top:12px"><div class="panel-head"><h2>Itens ainda não devolvidos</h2><span class="category">${notReturned.length} registros</span></div><div class="activity">${notReturned.slice(0,8).map(i=>`<div class="activity-item"><img src="${esc(itemPhoto(i))}" style="width:28px;height:28px;border-radius:8px;object-fit:cover"><div><b>${esc(i.title)}</b><p>${esc(i.local)} · ${fmt(i.date)}</p></div><span class="badge ${badgeClass(i.status)}">${esc(i.status)}</span></div>`).join('')}</div></section>`}
+function bindAdminHistory(){const b=$('#export-history');if(b)b.onclick=()=>downloadJSON({returns:get(K.returns,[]),items:get(K.items,[]).filter(i=>i.status==='Devolvido'),ratings:get(K.ratings,[])},'historico-devolucoes.json')}
+function adminUsers(){const users=get(K.users,[]),items=get(K.items,[]),lost=get(K.lost,[]);return `${adminHeader('Usuários','Gerencie as contas cadastradas.',`<button class="btn sm" id="add-admin">+ Administrador</button>`)}<section class="kpis"><div class="kpi"><span>Usuários cadastrados</span><b>${users.filter(u=>u.role==='user').length}</b></div><div class="kpi"><span>Administradores</span><b>${users.filter(u=>u.role==='admin').length}</b></div><div class="kpi"><span>Contas ativas</span><b>${users.filter(u=>u.active!==false).length}</b></div><div class="kpi"><span>Registros totais</span><b>${items.length+lost.length}</b></div></section><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>E-mail</th><th>Telefone</th><th>Cadastros</th><th>Status</th><th>Ações</th></tr></thead><tbody>${users.map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${u.role==='admin'?'Administrador':'Usuário'}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td>${items.filter(i=>i.ownerId===u.id).length+lost.filter(l=>l.userId===u.id).length}</td><td><span class="badge ${u.active!==false?'returned':'rejected'}">${u.active!==false?'Ativo':'Inativo'}</span></td><td><button class="mini-btn" data-toggle-user="${u.id}" ${u.id===currentUser().id?'disabled':''}>${u.active!==false?'⊘':'✓'}</button></td></tr>`).join('')}</tbody></table></div>`}
+function bindAdminUsers(){$$('[data-toggle-user]').forEach(b=>b.onclick=()=>{const users=get(K.users,[]),u=users.find(x=>x.id===b.dataset.toggleUser);u.active=u.active===false?true:false;set(K.users,users);renderAdmin('users')});$('#add-admin').onclick=openAddAdmin}
+function openAddAdmin(){$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="sheet"><div class="handle"></div><div class="sheet-head"><h3>Novo administrador</h3><button id="m-close" class="btn ghost sm">Fechar</button></div><div class="field"><label>Nome</label><input id="na-name" class="field-control"></div><div class="field"><label>E-mail</label><input id="na-email" class="field-control" type="email"></div><div class="field"><label>Telefone</label><input id="na-phone" class="field-control"></div><div class="field"><label>Senha</label>${passwordInput('na-pass')}</div><button id="na-save" class="btn full">Criar administrador</button></div></div>`;$('#m-close').onclick=closeModal;bindEyes();$('#na-save').onclick=async()=>{const name=$('#na-name').value.trim(),email=norm($('#na-email').value),pass=$('#na-pass').value;if(!name||!email||pass.length<4)return toast('Preencha os campos corretamente.');const users=get(K.users,[]);if(users.some(u=>norm(u.email)===email))return toast('E-mail já cadastrado.');users.push({id:id('u-admin-'),name,email,phone:$('#na-phone').value.trim(),passwordHash:await hashPassword(pass),role:'admin',active:true,createdAt:today()});set(K.users,users);closeModal();renderAdmin('users');toast('Administrador criado.')}}
+function adminSettings(){const s=settings();return `${adminHeader('Configurações','Categorias, locais, contato do setor e regras de funcionamento.',`<button class="btn sm" id="save-settings">Salvar alterações</button>`)}<div class="settings-grid"><section class="panel"><div class="panel-head"><h2>Dados institucionais</h2></div><div class="field"><label>Nome do campus</label><input id="set-campus" class="field-control" value="${esc(s.campus)}"></div><div class="field"><label>WhatsApp do setor (com DDD)</label><input id="set-wa" class="field-control" value="${esc(s.sectorWhatsapp)}"></div><div class="setting-list"><div class="setting-row"><span>Exigir aprovação para novos itens</span><button id="tog-approval" class="toggle ${s.requireApproval?'on':''}"></button></div><div class="setting-row"><span>Permitir devolução direta pelo usuário</span><button id="tog-direct" class="toggle ${s.allowDirectReturn?'on':''}"></button></div></div></section><section class="panel"><div class="panel-head"><h2>Categorias</h2><button class="btn secondary sm" id="add-cat">+ Nova</button></div><div id="cat-list" class="setting-list">${s.categories.map((c,n)=>`<div class="setting-row"><span>${esc(c)}</span><button class="mini-btn danger" data-del-cat="${n}">×</button></div>`).join('')}</div></section><section class="panel"><div class="panel-head"><h2>Locais do campus</h2><button class="btn secondary sm" id="add-loc">+ Novo</button></div><div class="setting-list">${s.locations.map((c,n)=>`<div class="setting-row"><span>${esc(c)}</span><button class="mini-btn danger" data-del-loc="${n}">×</button></div>`).join('')}</div></section><section class="panel"><div class="panel-head"><h2>Backup</h2></div><div class="notice">Exporte todos os dados antes da apresentação. Como o projeto usa localStorage, o backup permite restaurar os registros no mesmo ou em outro navegador.</div><div class="grid2" style="margin-top:9px"><button class="btn secondary" id="backup-export">Exportar backup</button><label class="btn secondary" style="text-align:center">Importar backup<input id="backup-import" type="file" accept="application/json" hidden></label></div><button class="btn ghost full" id="reset-demo" style="margin-top:7px">Restaurar dados de demonstração</button></section></div>`}
+function bindAdminSettings(){let s=settings();$('#tog-approval').onclick=e=>e.currentTarget.classList.toggle('on');$('#tog-direct').onclick=e=>e.currentTarget.classList.toggle('on');$('#save-settings').onclick=()=>{s.campus=$('#set-campus').value.trim()||s.campus;s.sectorWhatsapp=$('#set-wa').value.trim();s.requireApproval=$('#tog-approval').classList.contains('on');s.allowDirectReturn=$('#tog-direct').classList.contains('on');set(K.settings,s);toast('Configurações salvas.');renderAdmin('settings')};$('#add-cat').onclick=()=>{const x=prompt('Nome da nova categoria:');if(x&&x.trim()){s.categories.push(x.trim());set(K.settings,s);renderAdmin('settings')}};$('#add-loc').onclick=()=>{const x=prompt('Nome do novo local:');if(x&&x.trim()){s.locations.push(x.trim());set(K.settings,s);renderAdmin('settings')}};$$('[data-del-cat]').forEach(b=>b.onclick=()=>{if(s.categories.length<=1)return toast('Mantenha ao menos uma categoria.');s.categories.splice(+b.dataset.delCat,1);set(K.settings,s);renderAdmin('settings')});$$('[data-del-loc]').forEach(b=>b.onclick=()=>{if(s.locations.length<=1)return toast('Mantenha ao menos um local.');s.locations.splice(+b.dataset.delLoc,1);set(K.settings,s);renderAdmin('settings')});$('#backup-export').onclick=()=>downloadJSON({version:4,users:get(K.users,[]),items:get(K.items,[]),lost:get(K.lost,[]),returns:get(K.returns,[]),ratings:get(K.ratings,[]),settings:get(K.settings,{})},'achaki-backup.json');$('#backup-import').onchange=importBackup;$('#reset-demo').onclick=()=>{if(confirm('Restaurar a demonstração e apagar os dados locais atuais?')){Object.values(K).forEach(k=>localStorage.removeItem(k));seed();set(K.session,'u-admin');state.adminSection='overview';go('#admin');toast('Demonstração restaurada.')}}}
+async function importBackup(e){try{const data=JSON.parse(await e.target.files[0].text());if(!Array.isArray(data.users)||!Array.isArray(data.items))throw 0;set(K.users,data.users);set(K.items,data.items);set(K.lost,data.lost||[]);set(K.returns,data.returns||[]);set(K.ratings,data.ratings||[]);if(data.settings)set(K.settings,data.settings);toast('Backup importado.');renderAdmin('settings')}catch{toast('Backup inválido.')}}
+function routeApp(){seed();const r=route();if(r==='#home'||r==='#')return renderHome();if(r==='#login')return renderLogin();if(r==='#register')return renderRegister();if(r==='#forgot')return renderForgot();if(r.startsWith('#item/'))return renderDetail(decodeURIComponent(r.slice(6)));if(r==='#found')return renderFound();if(r==='#lost')return renderLost();if(r==='#records')return renderRecords();if(r==='#profile')return renderProfile();if(r==='#admin'||r.startsWith('#admin/')){state.adminSection=r.split('/')[1]||'overview';return renderAdmin()}return go('#home')}
+addEventListener('hashchange',routeApp);addEventListener('DOMContentLoaded',()=>{seed();if(!location.hash)location.hash='#home';else routeApp()});
