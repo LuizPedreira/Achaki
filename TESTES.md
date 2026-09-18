@@ -59,3 +59,15 @@
 8. Aluno 1 vê o perdido como recuperado e envia feedback.
 9. Aluno 2 vê o encontrado como devolvido e envia feedback.
 10. Admin vê os dois feedbacks no Histórico.
+
+
+## Fluxo v13 - dois alunos
+1. Entre como `aluno@fatec` e cadastre um item perdido com foto.
+2. Saia e entre como `aluno2@fatec`; cadastre o mesmo tipo de objeto como encontrado e escolha `Está comigo`.
+3. Volte para `aluno@fatec` > Meus registros > Perdi > `Meu item foi encontrado`.
+4. Selecione o item cadastrado pelo Aluno 2 e abra os detalhes.
+5. Clique em `Entrar em contato pelo WhatsApp`. O sistema deve registrar a solicitação e reservar o item.
+6. Entre como `aluno2@fatec`. Em Meus registros, deve aparecer a solicitação do Aluno 1.
+7. Abra a solicitação e clique em `Confirmar entrega`.
+8. O item encontrado e o perdido devem ficar como devolvidos/recuperados.
+9. Aluno 1 e Aluno 2 devem poder avaliar a devolução separadamente.

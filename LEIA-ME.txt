@@ -1,4 +1,4 @@
-Achados & Perdidos — Fatec | v8
+Achados & Perdidos — Fatec | v13
 
 Protótipo acadêmico estático em HTML, CSS e JavaScript, preparado para GitHub Pages e persistência local via localStorage.
 
@@ -105,3 +105,39 @@ O painel administrativo consolida as duas perspectivas no Histórico. A mesma pe
 - **Reservado** significa que um possível proprietário foi identificado e o objeto está separado enquanto a devolução é organizada; não significa que o item já foi entregue.
 - No painel, ao escolher Reservado, abre um formulário para identificar/vincular o possível proprietário.
 - Cadastros e devoluções agora exibem confirmação visual com resumo e próximos passos.
+
+
+#v11 — Visualização de fotos
+Na tela de detalhes, clique/toque na foto do item para abrir a imagem inteira em um visualizador. Se um item tiver mais de uma foto, use as setas ou as teclas ←/→. Esc fecha o visualizador.
+
+
+#v13 — cenário limpo para apresentação com dois alunos
+A restauração dos dados iniciais agora deixa o sistema pronto para uma demonstração ao vivo, sem uma solicitação perdida ou reserva já montada.
+
+##Contas fáceis
+- Aluno 1: `aluno@fatec` / `1234`
+- Aluno 2: `aluno2@fatec` / `1234`
+- Administrador: `admin@fatec` / `1234`
+
+##Estado inicial
+- Fone de ouvido: cadastrado por Ana (Aluno 1), **Em aberto**.
+- Carteira: cadastrada por Lucas, **Em aberto**.
+- Chave de carro: cadastrada por Maria, **Em aberto**.
+- Nenhuma solicitação de item perdido vem pronta.
+- Nenhum item começa reservado.
+
+Assim, durante a apresentação você pode criar um caso novo do zero: Aluno 1 registra que perdeu um objeto; Aluno 2 registra que encontrou o mesmo objeto; o administrador relaciona os dois, reserva o encontrado e conclui a devolução.
+
+Ao reservar um item, se existir exatamente uma solicitação perdida da mesma categoria, o painel sugere essa correspondência e preenche automaticamente o nome e telefone do possível proprietário. Isso agiliza a demonstração sem realizar a devolução automaticamente.
+
+
+#Novidades da v13
+- Fotos também no cadastro de item perdido (até 3, opcionais).
+- O botão do WhatsApp cria uma solicitação de contato registrada no sistema.
+- Quando o item está com quem encontrou, essa pessoa recebe a solicitação em Meus registros.
+- O responsável pode abrir o WhatsApp, rejeitar a identificação ou confirmar a entrega.
+- Ao confirmar a entrega, o item passa para Devolvido e é associado ao usuário que entrou em contato.
+- Se houver uma solicitação de item perdido vinculada, ela também é marcada como recuperada.
+- Os dois lados podem avaliar a devolução.
+- Em Meus registros > Perdi existe a ação "Meu item foi encontrado", que permite relacionar a solicitação a um item encontrado.
+- O painel administrativo exibe solicitações de contato pendentes quando o objeto está sob guarda da Fatec.
