@@ -71,3 +71,14 @@
 7. Abra a solicitação e clique em `Confirmar entrega`.
 8. O item encontrado e o perdido devem ficar como devolvidos/recuperados.
 9. Aluno 1 e Aluno 2 devem poder avaliar a devolução separadamente.
+
+
+## Contato sem perda cadastrada
+1. Restaure os dados iniciais.
+2. Entre como `aluno2@fatec` / `1234`.
+3. Abra um item encontrado por outro usuário sem antes cadastrar uma perda.
+4. Clique em **Entrar em contato pelo WhatsApp**.
+5. Volte ao sistema e abra **Meus registros > Perdi**.
+6. Deve existir uma **Solicitação de recuperação** criada automaticamente e vinculada ao item.
+7. Entre com o responsável pelo item e confirme a entrega.
+8. O registro automático deve passar para **Item recuperado** e liberar a avaliação para os dois lados.

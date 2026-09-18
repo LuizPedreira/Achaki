@@ -141,3 +141,9 @@ Ao reservar um item, se existir exatamente uma solicitação perdida da mesma ca
 - Os dois lados podem avaliar a devolução.
 - Em Meus registros > Perdi existe a ação "Meu item foi encontrado", que permite relacionar a solicitação a um item encontrado.
 - O painel administrativo exibe solicitações de contato pendentes quando o objeto está sob guarda da Fatec.
+
+
+## Ajuste v14 — contato sem registro prévio de perda
+Se um aluno encontrar um item na tela pública e iniciar contato pelo WhatsApp sem ter cadastrado a perda antes, o sistema cria automaticamente uma **solicitação de recuperação** em **Meus registros > Perdi**. Ela fica vinculada ao item encontrado e à solicitação de contato. Quando a entrega é confirmada, esse registro passa para recuperado e o aluno pode avaliar a devolução normalmente.
+
+Isso evita obrigar o aluno a voltar e cadastrar manualmente uma perda depois de já ter localizado o objeto.

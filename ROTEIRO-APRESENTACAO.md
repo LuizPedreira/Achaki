@@ -75,3 +75,7 @@ Use a nova sequência para demonstrar uma devolução direta:
 - O contato fica registrado automaticamente para o Aluno 2.
 - Aluno 2 abre a solicitação em Meus registros e confirma a entrega.
 - O sistema marca os dois registros como concluídos e libera feedback para os dois lados.
+
+
+### Alternativa que demonstra flexibilidade
+Você também pode mostrar que o Aluno 1 **não precisa cadastrar a perda antes**: basta localizar um item encontrado, iniciar o contato e o sistema cria automaticamente a solicitação em **Meus registros > Perdi**. Para a apresentação principal, o fluxo com os dois cadastros continua mais completo visualmente.
