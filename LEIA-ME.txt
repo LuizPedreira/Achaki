@@ -1,25 +1,25 @@
-# Achados & Perdidos — Fatec | v8
+Achados & Perdidos — Fatec | v8
 
 Protótipo acadêmico estático em HTML, CSS e JavaScript, preparado para GitHub Pages e persistência local via localStorage.
 
-## Contas de demonstração
+#Contas de demonstração
 
-### Usuário
-- E-mail: `ana.rocha@fatec.sp.gov.br`
+##Usuário
+- E-mail: `aluno@fatec`
 - Senha: `1234`
 
-### Administrador
-- E-mail: `admin@fatec.sp.gov.br`
-- Senha: `admin123`
+##Administrador
+- E-mail: `admin@fatec`
+- Senha: `1234`
 
-## Registros padrão
+#Registros padrão
 - **Fone de ouvido** — cadastrado por Ana.
 - **Carteira marrom com corrente** — cadastrada por Lucas.
 - **Chave de carro** — cadastrada por Maria.
 
 Ao entrar como Ana, somente o fone aparece entre os itens encontrados por ela. Os demais continuam públicos, mas pertencem aos respectivos usuários.
 
-## Fluxo público
+#Fluxo público
 - A aplicação abre diretamente na listagem de itens, sem exigir login.
 - Busca e filtros podem ser usados sem autenticação.
 - O detalhe do item é público.
@@ -27,7 +27,7 @@ Ao entrar como Ana, somente o fone aparece entre os itens encontrados por ela. O
 - Ao clicar em **Entrar**, o usuário faz login e retorna ao mesmo item.
 - Depois do login, o botão do WhatsApp é liberado.
 
-## Cadastro de item encontrado
+#Cadastro de item encontrado
 - Exige de 1 a 3 fotos.
 - Permite galeria/arquivo ou câmera do celular.
 - Comprime as imagens antes de armazenar.
@@ -41,14 +41,14 @@ A devolução não é informada no cadastro inicial. Ela é registrada depois, q
 - se o item estiver com o usuário que encontrou, ele registra a devolução em **Meus registros**;
 - se estiver na Fatec, o administrador registra a devolução pelo painel.
 
-## Cadastro de item perdido
+#Cadastro de item perdido
 - Título, descrição, categoria e data aproximada.
 - Local opcional.
 - Opção de compartilhar contato.
 - Proteção contra solicitação idêntica.
 - Rascunho automático.
 
-## Painel administrativo
+#Painel administrativo
 - Visão geral com indicadores reais do armazenamento atual.
 - Cadastro de novo item encontrado pelo setor.
 - Gestão de itens encontrados.
@@ -62,7 +62,7 @@ A devolução não é informada no cadastro inicial. Ela é registrada depois, q
 - Configuração do WhatsApp institucional, categorias e locais.
 - Exportação e importação de backup JSON.
 
-## Requisitos funcionais implementados
+#Requisitos funcionais implementados
 - RF01 Cadastro de usuários.
 - RF02 Login e autenticação.
 - RF03 Cadastro de item encontrado com foto, descrição, categoria, local, data e posse atual.
@@ -76,10 +76,22 @@ A devolução não é informada no cadastro inicial. Ela é registrada depois, q
 - RF11 Informação da posse atual do item.
 - RF12 Registro formal da devolução e manutenção do histórico.
 
-## GitHub Pages
+#GitHub Pages
 Envie todos os arquivos e pastas para a raiz do repositório e configure:
 
 `Settings > Pages > Deploy from a branch > main > /(root)`
 
-## Limitação desta versão
+#Limitação desta versão
 O GitHub Pages não possui banco de dados. Portanto, cadastros e fotos enviados ficam no navegador em que foram criados. Os três itens padrão e suas imagens ficam no próprio repositório e aparecem em qualquer dispositivo.
+
+
+#v9 — feedback dos dois lados
+Após uma devolução, o sistema permite duas avaliações independentes:
+- **Quem perdeu/recuperou** avalia como foi receber o item de volta.
+- **Quem encontrou/devolveu** avalia como foi o processo de entrega.
+
+O painel administrativo consolida as duas perspectivas no Histórico. A mesma pessoa não consegue enviar duas vezes a mesma perspectiva. Na devolução direta, também é possível vincular uma solicitação de item perdido para liberar o feedback da pessoa que recuperou o objeto.
+
+##Acessos simples para a apresentação
+- Aluno: `aluno@fatec` / `1234`
+- Administrador: `admin@fatec` / `1234`

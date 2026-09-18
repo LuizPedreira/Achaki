@@ -5,12 +5,12 @@ Protótipo acadêmico estático em HTML, CSS e JavaScript, preparado para GitHub
 ## Contas de demonstração
 
 ### Usuário
-- E-mail: `ana.rocha@fatec.sp.gov.br`
+- E-mail: `aluno@fatec`
 - Senha: `1234`
 
 ### Administrador
-- E-mail: `admin@fatec.sp.gov.br`
-- Senha: `admin123`
+- E-mail: `admin@fatec`
+- Senha: `1234`
 
 ## Registros padrão
 - **Fone de ouvido** — cadastrado por Ana.
@@ -83,3 +83,15 @@ Envie todos os arquivos e pastas para a raiz do repositório e configure:
 
 ## Limitação desta versão
 O GitHub Pages não possui banco de dados. Portanto, cadastros e fotos enviados ficam no navegador em que foram criados. Os três itens padrão e suas imagens ficam no próprio repositório e aparecem em qualquer dispositivo.
+
+
+## v9 — feedback dos dois lados
+Após uma devolução, o sistema permite duas avaliações independentes:
+- **Quem perdeu/recuperou** avalia como foi receber o item de volta.
+- **Quem encontrou/devolveu** avalia como foi o processo de entrega.
+
+O painel administrativo consolida as duas perspectivas no Histórico. A mesma pessoa não consegue enviar duas vezes a mesma perspectiva. Na devolução direta, também é possível vincular uma solicitação de item perdido para liberar o feedback da pessoa que recuperou o objeto.
+
+### Acessos simples para a apresentação
+- Aluno: `aluno@fatec` / `1234`
+- Administrador: `admin@fatec` / `1234`

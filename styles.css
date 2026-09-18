@@ -32,3 +32,12 @@
 
 /* v8: estados de publicação imediata */
 .notice.green{background:#eefaf2;border-color:#d7f1df;color:#2c6b42}
+
+
+/* v9 - feedback em duas perspectivas, preservando o layout existente */
+.feedback-panel{margin-top:8px;background:#fff9ee;border-color:#f3dfba}
+.feedback-panel.done{background:#f0faf4;border-color:#cfead9}
+.feedback-panel>.icon{color:#d68a0a;flex:0 0 auto}
+.feedback-summary{border:0;background:transparent;padding:0;text-align:left;color:var(--text);display:flex;flex-direction:column;gap:2px;cursor:pointer}
+.feedback-summary b{font-size:11px;color:#b56c00}
+.feedback-summary span{font-size:8px;color:var(--muted)}
