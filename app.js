@@ -1,6 +1,6 @@
 
-const K={users:'achaki_v6_users',items:'achaki_v6_items',lost:'achaki_v6_lost',ratings:'achaki_v6_ratings',settings:'achaki_v6_settings',session:'achaki_v6_session'};
-const state={category:'Todos',recordTab:'Todos',filters:{category:null,status:null,from:'',to:'',location:''},photos:[],rating:4,ratingTags:new Set(),pendingRoute:null,adminSearch:'',adminFoundFilter:'Todos'};
+const K={users:'achaki_v7_users',items:'achaki_v7_items',lost:'achaki_v7_lost',ratings:'achaki_v7_ratings',settings:'achaki_v7_settings',session:'achaki_v7_session',foundDraft:'achaki_v7_found_draft',lostDraft:'achaki_v7_lost_draft'};
+const state={category:'Todos',recordTab:'Todos',filters:{category:null,status:null,from:'',to:'',location:''},photos:[],rating:4,ratingTags:new Set(),pendingRoute:null,adminSearch:'',adminFoundFilter:'Todos',adminHistoryTab:'Devolvidos',photoBusy:false};
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const read=(k,f)=>{try{return JSON.parse(localStorage.getItem(k))??f}catch{return f}}; const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const esc=(v='')=>String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
@@ -73,23 +73,114 @@ async function resetPassword(){const email=norm($('#fEmail').value),users=read(K
 function protectedTop(title){return `<div class="auth-titlebar"><button class="icon-btn" data-go="home">${icon('back')}</button><h2>${title}</h2><span></span></div>`}
 function foundPage(){
   if(!requireUser('found'))return;
-  state.photos=[];
-  const s=read(K.settings,{});
-  const content=`<section class="mobile-page">${protectedTop('Registrar item encontrado')}<div class="upload-zone"><div class="upload-title"><div><b>Fotos do item</b><div class="tiny muted">Adicione até 3 fotos. A primeira será a capa.</div></div><span id="photoCount" class="tiny muted">0/3</span></div><div id="photoGrid" class="photo-grid"><label class="photo-add">${icon('camera','lg')}<b>Adicionar</b><input id="photoInput" hidden type="file" accept="image/*" multiple></label></div></div><div class="field"><label>Título do item</label><input id="foTitle" class="control" placeholder="Ex.: Fone de ouvido sem fio"></div><div class="field"><label>Descrição</label><textarea id="foDesc" class="control" placeholder="Descreva o item com detalhes"></textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="foCat" class="control">${s.categories.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="field"><label>Data do encontro</label><input id="foDate" type="date" class="control" value="${today()}"></div></div><div class="field"><label>Local onde foi encontrado</label><select id="foLocation" class="control"><option value="">Selecione</option>${s.locations.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="field"><label>Onde o item está agora?</label><div class="choice-grid"><button class="choice-card" data-holder="USER"><b>Está comigo</b><span>Quem perdeu poderá combinar a retirada com você.</span></button><button class="choice-card active" data-holder="FATEC"><b>Entreguei na Fatec</b><span>O item está no setor de Achados e Perdidos.</span></button></div></div><div class="field"><label>O item já foi devolvido ao proprietário?</label><div class="choice-grid"><button class="choice-card active" data-found-returned="NO"><b>Ainda não</b><span>O item continua aguardando o proprietário.</span></button><button class="choice-card" data-found-returned="YES"><b>Sim, já foi devolvido</b><span>Registre os dados para manter o histórico.</span></button></div></div><div id="foundReturnFields" class="return-fields hidden"><div class="return-fields-title">${icon('check')} Informações da devolução</div><div class="field"><label>Nome do proprietário</label><input id="foOwner" class="control" placeholder="Nome de quem recebeu o item"></div><div class="grid2"><div class="field"><label>Data da devolução</label><input id="foReturnDate" type="date" class="control" value="${today()}"></div><div class="field"><label>Telefone (opcional)</label><input id="foOwnerPhone" class="control" placeholder="(16) 99999-9999"></div></div><div class="field"><label>Observações (opcional)</label><textarea id="foReturnNotes" class="control" placeholder="Ex.: entregue pessoalmente após confirmação das características"></textarea></div></div><div class="notice">Seu registro será revisado pela administração antes de aparecer para os demais usuários.</div><button id="publishFound" class="btn full" style="margin-top:12px">Publicar registro</button></section>`;
+  const draft=read(K.foundDraft,null);
+  state.photos=Array.isArray(draft?.photos)?draft.photos.slice(0,3):[];
+  const cfg=read(K.settings,{});
+  const content=`<section class="mobile-page">${protectedTop('Registrar item encontrado')}
+    <div class="upload-zone">
+      <div class="upload-title"><div><b>Fotos do item</b><div class="tiny muted">Adicione de 1 a 3 fotos. A primeira será a capa.</div></div><span id="photoCount" class="tiny muted">${state.photos.length}/3</span></div>
+      <div id="photoGrid" class="photo-grid"></div>
+      <div class="photo-actions" id="photoActions">
+        <button type="button" class="photo-action-btn" id="choosePhotos">${icon('camera')}<span><b>Escolher foto</b><small>Galeria ou arquivos</small></span></button>
+        <button type="button" class="photo-action-btn" id="takePhoto">${icon('camera')}<span><b>Usar câmera</b><small>Em celulares compatíveis</small></span></button>
+        <input id="photoInput" class="native-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/*" multiple>
+        <input id="cameraInput" class="native-file-input" type="file" accept="image/*" capture="environment">
+      </div>
+      <div id="photoMessage" class="photo-message">JPEG, PNG ou WebP. As imagens são redimensionadas automaticamente.</div>
+    </div>
+    <div class="field"><label>Título do item</label><input id="foTitle" class="control" placeholder="Ex.: Fone de ouvido sem fio" value="${esc(draft?.title||'')}"></div>
+    <div class="field"><label>Descrição</label><textarea id="foDesc" class="control" placeholder="Descreva o item com detalhes">${esc(draft?.description||'')}</textarea></div>
+    <div class="grid2"><div class="field"><label>Categoria</label><select id="foCat" class="control">${cfg.categories.map(x=>`<option ${draft?.category===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Data do encontro</label><input id="foDate" type="date" class="control" value="${esc(draft?.date||today())}"></div></div>
+    <div class="field"><label>Local onde foi encontrado</label><select id="foLocation" class="control"><option value="">Selecione</option>${cfg.locations.map(x=>`<option ${draft?.location===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>Onde o item está agora?</label><div class="choice-grid"><button type="button" class="choice-card ${draft?.holder==='USER'?'active':''}" data-holder="USER"><b>Está comigo</b><span>Quem perdeu poderá combinar a retirada com você.</span></button><button type="button" class="choice-card ${!draft?.holder||draft?.holder==='FATEC'?'active':''}" data-holder="FATEC"><b>Entreguei na Fatec</b><span>O item está no setor de Achados e Perdidos.</span></button></div></div>
+    <div class="field"><label>O item já foi devolvido ao proprietário?</label><div class="choice-grid"><button type="button" class="choice-card ${draft?.returned!=='YES'?'active':''}" data-found-returned="NO"><b>Ainda não</b><span>O item continua aguardando o proprietário.</span></button><button type="button" class="choice-card ${draft?.returned==='YES'?'active':''}" data-found-returned="YES"><b>Sim, já foi devolvido</b><span>Registre os dados para manter o histórico.</span></button></div></div>
+    <div id="foundReturnFields" class="return-fields ${draft?.returned==='YES'?'':'hidden'}"><div class="return-fields-title">${icon('check')} Informações da devolução</div><div class="field"><label>Nome do proprietário</label><input id="foOwner" class="control" placeholder="Nome de quem recebeu o item" value="${esc(draft?.ownerName||'')}"></div><div class="grid2"><div class="field"><label>Data da devolução</label><input id="foReturnDate" type="date" class="control" value="${esc(draft?.returnDate||today())}"></div><div class="field"><label>Telefone (opcional)</label><input id="foOwnerPhone" class="control" placeholder="(16) 99999-9999" value="${esc(draft?.ownerPhone||'')}"></div></div><div class="field"><label>Observações (opcional)</label><textarea id="foReturnNotes" class="control" placeholder="Ex.: entregue pessoalmente após confirmação das características">${esc(draft?.returnNotes||'')}</textarea></div></div>
+    <div class="draft-note" id="foundDraftNote">${icon('check')} Rascunho salvo automaticamente neste dispositivo</div>
+    <div class="notice">Seu registro será revisado pela administração antes de aparecer para os demais usuários.</div>
+    <button id="publishFound" class="btn full" style="margin-top:12px">Publicar registro</button>
+  </section>`;
   $('#app').innerHTML=mobileShell(content,'found',true);
   bindCommon();
-  $('#photoInput').onchange=e=>handlePhotos(e.target.files);
-  $$('[data-holder]').forEach(b=>b.onclick=()=>{$$('[data-holder]').forEach(x=>x.classList.remove('active'));b.classList.add('active')});
-  $$('[data-found-returned]').forEach(b=>b.onclick=()=>{$$('[data-found-returned]').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#foundReturnFields').classList.toggle('hidden',b.dataset.foundReturned!=='YES')});
+  renderPhotoGrid();
+  $('#choosePhotos').onclick=()=>$('#photoInput').click();
+  $('#takePhoto').onclick=()=>$('#cameraInput').click();
+  $('#photoInput').onchange=e=>handlePhotos(e.target.files,e.target);
+  $('#cameraInput').onchange=e=>handlePhotos(e.target.files,e.target);
+  $$('[data-holder]').forEach(b=>b.onclick=()=>{$$('[data-holder]').forEach(x=>x.classList.remove('active'));b.classList.add('active');saveFoundDraft()});
+  $$('[data-found-returned]').forEach(b=>b.onclick=()=>{$$('[data-found-returned]').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#foundReturnFields').classList.toggle('hidden',b.dataset.foundReturned!=='YES');saveFoundDraft()});
+  ['foTitle','foDesc','foCat','foDate','foLocation','foOwner','foReturnDate','foOwnerPhone','foReturnNotes'].forEach(id=>{const el=$('#'+id);if(el)el.addEventListener('input',debounce(saveFoundDraft,250));if(el?.tagName==='SELECT')el.addEventListener('change',saveFoundDraft)});
   $('#publishFound').onclick=saveFound;
 }
-function compressImage(file,max=720,q=.66){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const sc=Math.min(1,max/Math.max(img.width,img.height)),w=Math.round(img.width*sc),h=Math.round(img.height*sc),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);res(c.toDataURL('image/jpeg',q))};img.onerror=rej;img.src=r.result};r.onerror=rej;r.readAsDataURL(file)})}
-function renderPhotoGrid(){const g=$('#photoGrid');g.innerHTML=state.photos.map((p,i)=>`<div class="photo-slot"><img src="${p}"><button class="remove-photo" data-rm="${i}">×</button></div>`).join('')+(state.photos.length<3?`<label class="photo-add">${icon('camera','lg')}<b>Adicionar</b><input id="photoInput2" hidden type="file" accept="image/*" multiple></label>`:'');$('#photoCount').textContent=`${state.photos.length}/3`;$$('[data-rm]').forEach(b=>b.onclick=e=>{e.preventDefault();state.photos.splice(+b.dataset.rm,1);renderPhotoGrid()});if($('#photoInput2'))$('#photoInput2').onchange=e=>handlePhotos(e.target.files)}
+function debounce(fn,wait=250){let t;return(...args)=>{clearTimeout(t);t=setTimeout(()=>fn(...args),wait)}}
+function saveFoundDraft(){
+  if(!$('#foTitle'))return;
+  const holder=$('[data-holder].active')?.dataset.holder||'FATEC',returned=$('[data-found-returned].active')?.dataset.foundReturned||'NO';
+  write(K.foundDraft,{title:$('#foTitle').value,description:$('#foDesc').value,category:$('#foCat').value,date:$('#foDate').value,location:$('#foLocation').value,holder,returned,ownerName:$('#foOwner')?.value||'',returnDate:$('#foReturnDate')?.value||'',ownerPhone:$('#foOwnerPhone')?.value||'',returnNotes:$('#foReturnNotes')?.value||'',photos:[...state.photos],savedAt:nowISO()});
+}
+function clearFoundDraft(){localStorage.removeItem(K.foundDraft)}
+function fileToDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)})}
+async function compressImage(file,max=1000,q=.72){
+  const src=await fileToDataURL(file);
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+        const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale)),h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+        const c=document.createElement('canvas');c.width=w;c.height=h;
+        const ctx=c.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+        let out;
+        try{out=c.toDataURL('image/jpeg',q)}catch{out=src}
+        res(out);
+      }catch(err){rej(err)}
+    };
+    img.onerror=()=>rej(new Error('Formato de imagem não suportado pelo navegador.'));
+    img.src=src;
+  });
+}
+async function handlePhotos(fileList,inputEl){
+  const files=[...(fileList||[])];
+  if(!files.length)return;
+  if(state.photoBusy)return;
+  state.photoBusy=true;
+  const msg=$('#photoMessage');
+  if(msg){msg.textContent='Processando foto(s)...';msg.classList.add('busy')}
+  try{
+    for(const file of files){
+      if(state.photos.length>=3){toast('Você pode adicionar no máximo 3 fotos.');break}
+      if(!file.type.startsWith('image/')){toast(`“${file.name}” não é uma imagem válida.`);continue}
+      if(file.size>15*1024*1024){toast(`“${file.name}” é muito grande. Use uma foto de até 15 MB.`);continue}
+      try{
+        const data=await compressImage(file);
+        if(!data||!String(data).startsWith('data:image/'))throw new Error('Falha ao ler imagem');
+        state.photos.push(data);
+        renderPhotoGrid();
+        saveFoundDraft();
+      }catch(err){
+        console.error(err);
+        toast(`Não foi possível abrir “${file.name}”. Tente JPG, PNG ou WebP.`);
+      }
+    }
+  }finally{
+    state.photoBusy=false;
+    if(inputEl)inputEl.value='';
+    if(msg){msg.textContent=state.photos.length?'Foto adicionada. Você pode adicionar até 3 imagens.':'JPEG, PNG ou WebP. As imagens são redimensionadas automaticamente.';msg.classList.remove('busy')}
+  }
+}
+function renderPhotoGrid(){
+  const g=$('#photoGrid');if(!g)return;
+  g.innerHTML=state.photos.length?state.photos.map((p,i)=>`<div class="photo-slot"><img src="${p}" alt="Foto ${i+1} do item"><div class="photo-index">${i===0?'Capa':i+1}</div><button type="button" class="remove-photo" data-rm="${i}" aria-label="Remover foto">×</button></div>`).join(''):`<div class="photo-empty">${icon('camera','lg')}<b>Nenhuma foto adicionada</b><span>Use “Escolher foto” ou “Usar câmera”.</span></div>`;
+  if($('#photoCount'))$('#photoCount').textContent=`${state.photos.length}/3`;
+  $$('[data-rm]').forEach(b=>b.onclick=e=>{e.preventDefault();state.photos.splice(+b.dataset.rm,1);renderPhotoGrid();saveFoundDraft()});
+  const disabled=state.photos.length>=3;
+  if($('#choosePhotos'))$('#choosePhotos').disabled=disabled;
+  if($('#takePhoto'))$('#takePhoto').disabled=disabled;
+}
 function saveFound(){
-  if(!state.photos.length)return toast('Adicione pelo menos uma foto.');
-  const title=$('#foTitle').value.trim(),desc=$('#foDesc').value.trim(),cat=$('#foCat').value,date=$('#foDate').value,location=$('#foLocation').value,holder=$('[data-holder].active').dataset.holder;
+  if(!state.photos.length)return toast('Adicione pelo menos uma foto do item.');
+  const title=$('#foTitle').value.trim(),desc=$('#foDesc').value.trim(),cat=$('#foCat').value,date=$('#foDate').value,location=$('#foLocation').value,holder=$('[data-holder].active')?.dataset.holder;
   const returned=$('[data-found-returned].active')?.dataset.foundReturned==='YES';
-  if(!title||!desc||!date||!location)return toast('Preencha todos os campos obrigatórios.');
+  if(!title||!desc||!cat||!date||!location||!holder)return toast('Preencha todos os campos obrigatórios.');
   let returnInfo=null;
   if(returned){
     const ownerName=$('#foOwner').value.trim(),returnDate=$('#foReturnDate').value;
@@ -97,14 +188,32 @@ function saveFound(){
     returnInfo={ownerName,phone:$('#foOwnerPhone').value.replace(/\D/g,''),document:'',date:returnDate,notes:$('#foReturnNotes').value.trim(),registeredBy:currentUser().id,method:holder==='USER'?'DIRECT_USER':'FINDER_REPORTED'};
   }
   const items=read(K.items,[]);
-  if(items.some(i=>norm(i.title)===norm(title)&&i.category===cat&&i.date===date&&i.location===location))return toast('Já existe um registro idêntico.');
-  items.unshift({id:'item-'+Date.now(),creatorId:currentUser().id,title,description:desc,category:cat,date,location,holder,status:returned?'Devolvido':'Em aberto',approved:false,photos:[...state.photos],createdAt:nowISO(),returnInfo});
-  write(K.items,items);
-  go('records');
-  toast(returned?'Registro enviado com a devolução informada.':'Registro enviado para aprovação.');
+  if(items.some(i=>norm(i.title)===norm(title)&&i.category===cat&&i.date===date&&norm(i.location)===norm(location)))return toast('Já existe um registro idêntico. Revise os dados.');
+  const newItem={id:'item-'+Date.now(),creatorId:currentUser().id,title,description:desc,category:cat,date,location,holder,status:returned?'Devolvido':'Em aberto',approved:false,photos:[...state.photos],createdAt:nowISO(),returnInfo};
+  try{
+    items.unshift(newItem);write(K.items,items);
+  }catch(err){
+    console.error(err);return toast('O navegador ficou sem espaço para salvar as fotos. Remova uma imagem ou use fotos menores.');
+  }
+  clearFoundDraft();state.photos=[];go('records');toast(returned?'Registro enviado com a devolução informada.':'Registro enviado para aprovação.');
 }
-function lostPage(){if(!requireUser('lost'))return;const s=read(K.settings,{});const content=`<section class="mobile-page">${protectedTop('Registrar item perdido')}<div class="notice">Descreva o item com o máximo de detalhes. Isso ajuda a equipe a identificar o dono quando ele for encontrado.</div><div class="field" style="margin-top:11px"><label>O que você perdeu?</label><input id="loTitle" class="control" placeholder="Ex.: Garrafa térmica azul"></div><div class="field"><label>Descrição</label><textarea id="loDesc" class="control" placeholder="Cor, marca, adesivos ou qualquer detalhe"></textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="loCat" class="control">${s.categories.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="field"><label>Data aproximada</label><input id="loDate" class="control" type="date" value="${today()}"></div></div><div class="field"><label>Onde acha que perdeu? (opcional)</label><select id="loLocation" class="control"><option value="">Selecione um local</option>${s.locations.map(x=>`<option>${x}</option>`).join('')}</select></div><label class="record-card row between"><div><b class="small">Compartilhar meu contato</b><div class="tiny muted">Permite que a equipe fale com você.</div></div><input id="loShare" type="checkbox" checked></label><button id="saveLost" class="btn full">Registrar solicitação</button></section>`;$('#app').innerHTML=mobileShell(content,'lost',true);bindCommon();$('#saveLost').onclick=saveLost}
-function saveLost(){const title=$('#loTitle').value.trim(),desc=$('#loDesc').value.trim(),cat=$('#loCat').value,date=$('#loDate').value;if(!title||!desc||!date)return toast('Preencha os campos obrigatórios.');const arr=read(K.lost,[]);arr.unshift({id:'lost-'+Date.now(),userId:currentUser().id,title,description:desc,category:cat,date,location:$('#loLocation').value,shareContact:$('#loShare').checked,status:'Em aberto',createdAt:nowISO()});write(K.lost,arr);go('records');toast('Solicitação registrada.')}
+function lostPage(){
+  if(!requireUser('lost'))return;
+  const cfg=read(K.settings,{}),draft=read(K.lostDraft,null);
+  const content=`<section class="mobile-page">${protectedTop('Registrar item perdido')}<div class="notice">Descreva o item com o máximo de detalhes. Isso ajuda a equipe a identificar o dono quando ele for encontrado.</div><div class="field" style="margin-top:11px"><label>O que você perdeu?</label><input id="loTitle" class="control" placeholder="Ex.: Garrafa térmica azul" value="${esc(draft?.title||'')}"></div><div class="field"><label>Descrição</label><textarea id="loDesc" class="control" placeholder="Cor, marca, adesivos ou qualquer detalhe">${esc(draft?.description||'')}</textarea></div><div class="grid2"><div class="field"><label>Categoria</label><select id="loCat" class="control">${cfg.categories.map(x=>`<option ${draft?.category===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Data aproximada</label><input id="loDate" class="control" type="date" value="${esc(draft?.date||today())}"></div></div><div class="field"><label>Onde acha que perdeu? (opcional)</label><select id="loLocation" class="control"><option value="">Selecione um local</option>${cfg.locations.map(x=>`<option ${draft?.location===x?'selected':''}>${x}</option>`).join('')}</select></div><label class="record-card row between"><div><b class="small">Compartilhar meu contato</b><div class="tiny muted">Permite que a equipe fale com você.</div></div><input id="loShare" type="checkbox" ${draft?.shareContact===false?'':'checked'}></label><div class="draft-note">${icon('check')} Rascunho salvo automaticamente neste dispositivo</div><button id="saveLost" class="btn full">Registrar solicitação</button></section>`;
+  $('#app').innerHTML=mobileShell(content,'lost',true);bindCommon();
+  const saveDraft=()=>write(K.lostDraft,{title:$('#loTitle').value,description:$('#loDesc').value,category:$('#loCat').value,date:$('#loDate').value,location:$('#loLocation').value,shareContact:$('#loShare').checked,savedAt:nowISO()});
+  ['loTitle','loDesc','loDate'].forEach(id=>$('#'+id).addEventListener('input',debounce(saveDraft,250)));['loCat','loLocation','loShare'].forEach(id=>$('#'+id).addEventListener('change',saveDraft));
+  $('#saveLost').onclick=saveLost;
+}
+function saveLost(){
+  const title=$('#loTitle').value.trim(),desc=$('#loDesc').value.trim(),cat=$('#loCat').value,date=$('#loDate').value,location=$('#loLocation').value;
+  if(!title||!desc||!cat||!date)return toast('Preencha os campos obrigatórios.');
+  const arr=read(K.lost,[]),uid=currentUser().id;
+  if(arr.some(i=>i.userId===uid&&norm(i.title)===norm(title)&&i.category===cat&&i.date===date&&norm(i.location||'')===norm(location||'')))return toast('Você já possui uma solicitação idêntica.');
+  arr.unshift({id:'lost-'+Date.now(),userId:uid,title,description:desc,category:cat,date,location,shareContact:$('#loShare').checked,status:'Em aberto',createdAt:nowISO()});
+  write(K.lost,arr);localStorage.removeItem(K.lostDraft);go('records');toast('Solicitação registrada.');
+}
 function recordsPage(){
   if(!requireUser('records'))return;
   const u=currentUser(),found=read(K.items,[]).filter(i=>i.creatorId===u.id),lost=read(K.lost,[]).filter(i=>i.userId===u.id);
@@ -221,12 +330,18 @@ function recoverLostModal(id){
 }
 function editLostModal(id){const a=read(K.lost,[]),i=a.find(x=>x.id===id);if(!i)return;$('#modal-root').innerHTML=`<div class="admin-modal-backdrop"><div class="admin-modal"><div class="modal-head"><h3>Editar item perdido</h3><button class="icon-btn" id="clm">${icon('x')}</button></div><div class="field"><label>Título</label><input id="elTitle" class="control" value="${esc(i.title)}"></div><div class="field"><label>Descrição</label><textarea id="elDesc" class="control">${esc(i.description)}</textarea></div><div class="field"><label>Status</label><select id="elStatus" class="control"><option ${i.status==='Em aberto'?'selected':''}>Em aberto</option><option ${i.status==='Devolvido'?'selected':''}>Devolvido</option></select></div><button class="btn full" id="saveLostEdit">Salvar alterações</button></div></div>`;$('#clm').onclick=closeModal;$('#saveLostEdit').onclick=()=>{i.title=$('#elTitle').value.trim();i.description=$('#elDesc').value.trim();i.status=$('#elStatus').value;write(K.lost,a);closeModal();adminLost();toast('Solicitação atualizada.')}}
 function adminHistory(){
-  const a=read(K.items,[]),ret=a.filter(i=>i.status==='Devolvido'),ratings=read(K.ratings,[]),avg=ratings.length?(ratings.reduce((s,r)=>s+r.score,0)/ratings.length).toFixed(1):'—';
+  const all=read(K.items,[]),returned=all.filter(i=>i.status==='Devolvido'),pending=all.filter(i=>i.status!=='Devolvido'),ratings=read(K.ratings,[]),avg=ratings.length?(ratings.reduce((sum,r)=>sum+r.score,0)/ratings.length).toFixed(1):'—';
+  const tab=state.adminHistoryTab||'Devolvidos';
   const methodLabel=m=>m==='DIRECT_USER'?'Direta pelo usuário':m==='FATEC'?'Setor da Fatec':m==='FINDER_REPORTED'?'Informada no cadastro':'—';
-  const body=`<div class="admin-page-title"><div><h2>Histórico de devoluções</h2><p>Itens devolvidos e informações do processo.</p></div><button class="btn secondary sm" onclick="exportHistory()">${icon('download')} Exportar relatório</button></div><div class="metric-grid"><div class="metric"><span>Total devolvido</span><strong>${ret.length}</strong></div><div class="metric"><span>Com avaliação</span><strong>${ratings.length}</strong></div><div class="metric"><span>Média</span><strong>${avg}</strong></div><div class="metric"><span>Não devolvidos</span><strong>${a.filter(i=>i.status!=='Devolvido').length}</strong></div></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>ITEM</th><th>PROPRIETÁRIO</th><th>DATA DEVOLUÇÃO</th><th>FORMA</th><th>LOCAL ORIGINAL</th><th>AVALIAÇÃO</th></tr></thead><tbody>${ret.map(i=>{const r=ratings.filter(x=>x.itemId===i.id).at(-1);return `<tr><td><div class="table-item"><div class="table-thumb"><img src="${i.photos[0]}"></div><b>${esc(i.title)}</b></div></td><td>${esc(i.returnInfo?.ownerName||'—')}</td><td>${fmtDate(i.returnInfo?.date)}</td><td>${methodLabel(i.returnInfo?.method)}</td><td>${esc(i.location)}</td><td>${r?`${'★'.repeat(r.score)} <span class="muted">${r.score}/5</span>`:'—'}</td></tr>`}).join('')}</tbody></table></div>`;
+  const rows=tab==='Devolvidos'?returned.map(i=>{const r=ratings.filter(x=>x.itemId===i.id).at(-1);return `<tr><td><div class="table-item"><div class="table-thumb"><img src="${i.photos[0]}"></div><b>${esc(i.title)}</b></div></td><td>${esc(i.returnInfo?.ownerName||'—')}</td><td>${fmtDate(i.returnInfo?.date)}</td><td>${methodLabel(i.returnInfo?.method)}</td><td>${esc(i.location)}</td><td>${r?`${'★'.repeat(r.score)} <span class="muted">${r.score}/5</span>`:'—'}</td></tr>`}).join(''):
+  pending.map(i=>`<tr><td><div class="table-item"><div class="table-thumb"><img src="${i.photos[0]}"></div><b>${esc(i.title)}</b></div></td><td>${esc(read(K.users,[]).find(u=>u.id===i.creatorId)?.name||'—')}</td><td>${fmtDate(i.date)}</td><td>${esc(i.status)}</td><td>${esc(i.holder==='FATEC'?'Fatec':'Com o usuário')}</td><td>${esc(i.location)}</td></tr>`).join('');
+  const headers=tab==='Devolvidos'?'<th>ITEM</th><th>PROPRIETÁRIO</th><th>DATA DEVOLUÇÃO</th><th>FORMA</th><th>LOCAL ORIGINAL</th><th>AVALIAÇÃO</th>':'<th>ITEM</th><th>REGISTRADO POR</th><th>DATA ENCONTRO</th><th>STATUS</th><th>POSSE ATUAL</th><th>LOCAL</th>';
+  const body=`<div class="admin-page-title"><div><h2>Histórico de itens</h2><p>Consulte itens devolvidos e ainda não devolvidos.</p></div><button class="btn secondary sm" id="exportHistoryBtn">${icon('download')} Exportar relatório</button></div><div class="metric-grid"><div class="metric"><span>Total devolvido</span><strong>${returned.length}</strong></div><div class="metric"><span>Não devolvidos</span><strong>${pending.length}</strong></div><div class="metric"><span>Com avaliação</span><strong>${ratings.length}</strong></div><div class="metric"><span>Média</span><strong>${avg}</strong></div></div><div class="admin-history-tabs"><button class="${tab==='Devolvidos'?'active':''}" data-history-tab="Devolvidos">Devolvidos (${returned.length})</button><button class="${tab==='Não devolvidos'?'active':''}" data-history-tab="Não devolvidos">Não devolvidos (${pending.length})</button></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr>${headers}</tr></thead><tbody>${rows||`<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">Nenhum registro nesta categoria.</td></tr>`}</tbody></table></div>`;
   $('#app').innerHTML=adminLayout('Histórico',body,'admin-history');bindAdmin();
+  $$('[data-history-tab]').forEach(b=>b.onclick=()=>{state.adminHistoryTab=b.dataset.historyTab;adminHistory()});
+  $('#exportHistoryBtn').onclick=exportHistory;
 }
-function exportHistory(){const data=read(K.items,[]).filter(i=>i.status==='Devolvido');downloadJSON('historico-devolucoes.json',data)}
+function exportHistory(){const data=read(K.items,[]);downloadJSON('historico-itens.json',data)}
 function adminUsers(){const users=read(K.users,[]),normal=users.filter(u=>u.role==='USER'),admins=users.filter(u=>u.role==='ADMIN');const body=`<div class="admin-page-title"><div><h2>Usuários</h2><p>Gerencie usuários e administradores cadastrados.</p></div><button class="btn sm" id="addAdmin">${icon('plus')} Adicionar administrador</button></div><div class="metric-grid"><div class="metric"><span>Total de usuários</span><strong>${users.length}</strong></div><div class="metric"><span>Usuários comuns</span><strong>${normal.length}</strong></div><div class="metric"><span>Administradores</span><strong>${admins.length}</strong></div><div class="metric"><span>Ativos</span><strong>${users.filter(u=>u.active).length}</strong></div></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>USUÁRIO</th><th>PERFIL</th><th>TELEFONE</th><th>REGISTROS</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>${users.map(u=>`<tr><td><div class="table-item"><div class="avatar" style="width:30px;height:30px">${initials(u.name)}</div><div><b>${esc(u.name)}</b><span>${esc(u.email)}</span></div></div></td><td>${u.role==='ADMIN'?'Administrador':'Aluno'}</td><td>${esc(u.phone||'—')}</td><td>${read(K.items,[]).filter(i=>i.creatorId===u.id).length+read(K.lost,[]).filter(i=>i.userId===u.id).length}</td><td>${u.active?'<span class="badge returned">Ativo</span>':'<span class="badge rejected">Desativado</span>'}</td><td><div class="table-actions"><button data-toggle-user="${u.id}" ${u.id===currentUser().id?'disabled':''}>${u.active?icon('x','sm'):icon('check','sm')}</button></div></td></tr>`).join('')}</tbody></table></div>`;$('#app').innerHTML=adminLayout('Usuários',body,'admin-users');bindAdmin();$('#addAdmin').onclick=addAdminModal;$$('[data-toggle-user]').forEach(b=>b.onclick=()=>toggleUser(b.dataset.toggleUser))}
 function toggleUser(id){const a=read(K.users,[]),u=a.find(x=>x.id===id);if(!u)return;u.active=!u.active;write(K.users,a);adminUsers();toast('Status do usuário atualizado.')}
 function addAdminModal(){$('#modal-root').innerHTML=`<div class="admin-modal-backdrop"><div class="admin-modal"><div class="modal-head"><h3>Adicionar administrador</h3><button class="icon-btn" id="ca">${icon('x')}</button></div><div class="field"><label>Nome</label><input id="aaName" class="control"></div><div class="field"><label>E-mail</label><input id="aaEmail" class="control"></div><div class="field"><label>Telefone</label><input id="aaPhone" class="control"></div><div class="field"><label>Senha inicial</label><input id="aaPass" type="password" class="control"></div><button id="saveAdmin" class="btn full">Criar administrador</button></div></div>`;$('#ca').onclick=closeModal;$('#saveAdmin').onclick=async()=>{if(!$('#aaName').value.trim()||!$('#aaEmail').value.trim()||$('#aaPass').value.length<4)return toast('Preencha os dados corretamente.');const a=read(K.users,[]);a.push({id:'u-admin-'+Date.now(),name:$('#aaName').value.trim(),email:$('#aaEmail').value.trim(),phone:$('#aaPhone').value.replace(/\D/g,''),passwordHash:await hashPassword($('#aaPass').value),role:'ADMIN',course:'Administração',campus:'Fatec Taquaritinga',active:true});write(K.users,a);closeModal();adminUsers();toast('Administrador criado.')}}

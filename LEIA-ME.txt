@@ -39,3 +39,29 @@ Como é GitHub Pages, os dados cadastrados permanecem no localStorage do navegad
 - Administrador pode registrar a recuperação diretamente na tela de itens perdidos.
 - O usuário que perdeu passa a ver o item como recuperado e pode avaliar a devolução quando houver vínculo.
 - Histórico administrativo informa a forma de devolução.
+
+
+#Auditoria de requisitos — versão v7
+
+##Requisitos funcionais
+- **RF01** Cadastro de usuário: nome, e-mail, senha e telefone.
+- **RF02** Login/autenticação com perfis Usuário e Administrador.
+- **RF03** Item encontrado com foto, descrição, categoria, local, data, situação de devolução e posse atual (usuário/Fatec).
+- **RF04** Registro de item perdido com descrição, categoria e data aproximada.
+- **RF05** Busca/filtros por categoria, palavra-chave, período, local e status.
+- **RF06** Exibição pública dos itens encontrados aprovados.
+- **RF07** Administrador altera status: Em aberto, Reservado e Devolvido.
+- **RF08** Histórico separado de devolvidos e não devolvidos.
+- **RF09** Administrador edita/exclui registros; duplicidade idêntica é bloqueada no cadastro.
+- **RF10** Avaliação/feedback após devolução.
+- **RF11** Cadastro informa se o item está com o usuário ou na Fatec.
+- **RF12** Administrador registra a devolução com proprietário, data, contato/documento e observações; devolução direta também pode ser registrada pelo usuário quando o item está com ele.
+
+##Não funcionais aplicáveis ao protótipo
+- Interface responsiva mobile/desktop.
+- Senhas não são armazenadas em texto puro; o protótipo usa hash SHA-256 no navegador.
+- Código estático HTML/CSS/JS, adequado a GitHub Pages.
+- Validação de duplicidade de registros idênticos.
+- Código versionável no Git/GitHub.
+
+**Observação:** disponibilidade de 95% depende do serviço de hospedagem escolhido e não pode ser garantida apenas pelo código estático. Os requisitos desejáveis RD01–RD04 continuam classificados como desejáveis no documento e não são apresentados como integrações reais quando não existe o serviço externo correspondente.
