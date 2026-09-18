@@ -1,45 +1,29 @@
-Achados & Perdidos • Fatec — versão 4 completa
+ Achados & Perdidos - Fatec (versão fiel v5)
 
-Projeto estático pronto para GitHub Pages, desenvolvido em HTML, CSS e JavaScript e usando `localStorage` para a demonstração.
+Versão estática para GitHub Pages, construída em HTML, CSS e JavaScript com localStorage.
 
-#Acessos de demonstração
+ Contas de demonstração
 
-##Usuário
-- E-mail: `ana.rocha@fatec.sp.gov.br`
-- Senha: `1234`
+**Usuário**
+- E-mail: ana.rocha@fatec.sp.gov.br
+- Senha: 1234
 
-##Administrador
-- E-mail: `admin@fatec.sp.gov.br`
-- Senha: `admin123`
+**Administrador**
+- E-mail: admin@fatec.sp.gov.br
+- Senha: admin123
 
-#Fluxo público
-Ao abrir o site, **não é solicitado login**. Os itens encontrados ficam visíveis publicamente. Ao abrir um item, a área de contato aparece protegida/ofuscada. O botão de login leva à autenticação e, depois do login, o usuário retorna ao item e recebe o botão para conversar pelo WhatsApp.
+ Registros padrão
+- Fone de ouvido — cadastrado por Ana.
+- Carteira — cadastrada por Lucas.
+- Chave de carro — cadastrada por Maria.
 
-#Funcionalidades implementadas
-- Cadastro e login de usuários com senha armazenada em hash SHA-256 no navegador
-- Perfis distintos: usuário e administrador
-- Consulta pública de itens encontrados
-- Busca e filtros por categoria, palavra-chave, local, período e status
-- Cadastro de item encontrado com até 3 fotos e informação de posse atual
-- Cadastro de item perdido
-- Aprovação administrativa de novos itens
-- Administração de status: Em aberto, Reservado, Devolvido
-- Edição e exclusão administrativa
-- Registro de devolução com data, proprietário, telefone, documento e observações
-- Registro de devolução direta pelo usuário quando o item permanece com ele
-- Histórico de devolvidos e não devolvidos
-- Avaliação do processo de devolução
-- Gestão de usuários e criação de administradores
-- Configuração de categorias, locais, WhatsApp do setor e regras
-- Backup e importação dos dados em JSON
-- PWA/cache para uso em GitHub Pages
+Portanto, ao entrar como Ana, apenas o fone aparece como registro encontrado dela. Os outros itens são públicos, mas pertencem a outros usuários.
 
-#Publicar no GitHub Pages
-1. Envie **o conteúdo desta pasta** para a raiz da branch `main`.
-2. GitHub > Settings > Pages.
-3. Source: `Deploy from a branch`.
-4. Branch: `main` e pasta `/(root)`.
-5. Salve.
+ Fluxo público
+A aplicação abre diretamente na listagem de itens, sem exigir login. Ao abrir um item, a área de contato fica bloqueada e ofuscada. O botão de login retorna o usuário ao mesmo item após autenticar, liberando o botão do WhatsApp.
 
-#Observação importante
-GitHub Pages é hospedagem estática. O `localStorage` é local para cada navegador, então dois celulares diferentes não compartilham os mesmos cadastros. Para uma versão real multiusuário, será necessário substituir a camada de armazenamento por Supabase ou outro backend/banco de dados.
+ GitHub Pages
+Envie todos os arquivos desta pasta para a raiz do repositório e use Settings > Pages > Deploy from a branch > main > /(root).
+
+ Observação
+Como é GitHub Pages, os dados cadastrados permanecem no localStorage do navegador e não sincronizam entre dispositivos.
