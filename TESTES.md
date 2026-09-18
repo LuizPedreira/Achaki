@@ -38,3 +38,11 @@
 7. Cadastre um item perdido: deve aparecer uma confirmação com “Ver em Meus registros”.
 8. Registre uma devolução: deve aparecer um resumo com item, proprietário, data e status.
 9. Editar item perdido no painel não deve permitir marcar Devolvido manualmente; use Registrar recuperação.
+
+
+## Teste da foto ampliada
+1. Abra qualquer item na tela inicial.
+2. Clique/toque na foto grande.
+3. Confirme que a foto abre inteira, sem corte.
+4. Feche no X, clicando fora ou pressionando Esc.
+5. Em item com várias fotos, valide as setas de navegação.

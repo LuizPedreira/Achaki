@@ -105,3 +105,7 @@ O painel administrativo consolida as duas perspectivas no Histórico. A mesma pe
 - **Reservado** significa que um possível proprietário foi identificado e o objeto está separado enquanto a devolução é organizada; não significa que o item já foi entregue.
 - No painel, ao escolher Reservado, abre um formulário para identificar/vincular o possível proprietário.
 - Cadastros e devoluções agora exibem confirmação visual com resumo e próximos passos.
+
+
+## v11 — Visualização de fotos
+Na tela de detalhes, clique/toque na foto do item para abrir a imagem inteira em um visualizador. Se um item tiver mais de uma foto, use as setas ou as teclas ←/→. Esc fecha o visualizador.
