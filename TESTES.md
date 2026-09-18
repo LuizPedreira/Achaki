@@ -46,3 +46,16 @@
 3. Confirme que a foto abre inteira, sem corte.
 4. Feche no X, clicando fora ou pressionando Esc.
 5. Em item com várias fotos, valide as setas de navegação.
+
+
+## Cenário v12 — dois alunos
+1. Restaurar dados iniciais no Admin e confirmar que não há itens perdidos e não há itens reservados.
+2. Confirmar login `aluno@fatec` / `1234`.
+3. Confirmar login `aluno2@fatec` / `1234`.
+4. Aluno 1 registra um item perdido novo.
+5. Aluno 2 registra o mesmo tipo de objeto como encontrado com foto.
+6. Admin altera o encontrado para Reservado e verifica a sugestão da solicitação perdida da mesma categoria.
+7. Admin registra a devolução vinculando a solicitação.
+8. Aluno 1 vê o perdido como recuperado e envia feedback.
+9. Aluno 2 vê o encontrado como devolvido e envia feedback.
+10. Admin vê os dois feedbacks no Histórico.

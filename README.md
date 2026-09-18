@@ -1,4 +1,4 @@
-# Achados & Perdidos — Fatec | v8
+# Achados & Perdidos — Fatec | v12
 
 Protótipo acadêmico estático em HTML, CSS e JavaScript, preparado para GitHub Pages e persistência local via localStorage.
 
@@ -109,3 +109,23 @@ O painel administrativo consolida as duas perspectivas no Histórico. A mesma pe
 
 ## v11 — Visualização de fotos
 Na tela de detalhes, clique/toque na foto do item para abrir a imagem inteira em um visualizador. Se um item tiver mais de uma foto, use as setas ou as teclas ←/→. Esc fecha o visualizador.
+
+
+## v12 — cenário limpo para apresentação com dois alunos
+A restauração dos dados iniciais agora deixa o sistema pronto para uma demonstração ao vivo, sem uma solicitação perdida ou reserva já montada.
+
+### Contas fáceis
+- Aluno 1: `aluno@fatec` / `1234`
+- Aluno 2: `aluno2@fatec` / `1234`
+- Administrador: `admin@fatec` / `1234`
+
+### Estado inicial
+- Fone de ouvido: cadastrado por Ana (Aluno 1), **Em aberto**.
+- Carteira: cadastrada por Lucas, **Em aberto**.
+- Chave de carro: cadastrada por Maria, **Em aberto**.
+- Nenhuma solicitação de item perdido vem pronta.
+- Nenhum item começa reservado.
+
+Assim, durante a apresentação você pode criar um caso novo do zero: Aluno 1 registra que perdeu um objeto; Aluno 2 registra que encontrou o mesmo objeto; o administrador relaciona os dois, reserva o encontrado e conclui a devolução.
+
+Ao reservar um item, se existir exatamente uma solicitação perdida da mesma categoria, o painel sugere essa correspondência e preenche automaticamente o nome e telefone do possível proprietário. Isso agiliza a demonstração sem realizar a devolução automaticamente.
