@@ -27,3 +27,15 @@ Envie todos os arquivos desta pasta para a raiz do repositório e use Settings >
 
 ## Observação
 Como é GitHub Pages, os dados cadastrados permanecem no localStorage do navegador e não sincronizam entre dispositivos.
+
+
+## Melhorias da versão 6
+- Área de contato bloqueado redesenhada, sem textos sobrepostos.
+- O usuário pode informar no cadastro se o item já foi devolvido.
+- Quando o item permanece com quem encontrou, o próprio usuário pode registrar a devolução depois em Meus registros.
+- Quando o item está na Fatec, a interface informa que a devolução é responsabilidade do administrador.
+- Registro de devolução guarda proprietário, data, telefone e observações.
+- Administrador pode vincular uma devolução a uma solicitação de item perdido.
+- Administrador pode registrar a recuperação diretamente na tela de itens perdidos.
+- O usuário que perdeu passa a ver o item como recuperado e pode avaliar a devolução quando houver vínculo.
+- Histórico administrativo informa a forma de devolução.
