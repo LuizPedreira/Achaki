@@ -1,149 +1,88 @@
-# Achados & Perdidos — Fatec | v13
+# Achaki · Achados e Perdidos da Fatec Taquaritinga
 
-Protótipo acadêmico estático em HTML, CSS e JavaScript, preparado para GitHub Pages e persistência local via localStorage.
+Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
-## Contas de demonstração
+## Rodar no computador
 
-### Usuário
-- E-mail: `aluno@fatec`
-- Senha: `1234`
+Com Node.js 24 ou superior, na raiz do repositório:
 
-### Administrador
-- E-mail: `admin@fatec`
-- Senha: `1234`
+```sh
+npm test
+npm run dev:demo
+```
 
-## Registros padrão
-- **Fone de ouvido** — cadastrado por Ana.
-- **Carteira marrom com corrente** — cadastrada por Lucas.
-- **Chave de carro** — cadastrada por Maria.
+Abra [http://127.0.0.1:8787](http://127.0.0.1:8787). A demonstração local usa SQLite persistente e as fotos do protótipo. Também funciona sem dependências npm instaladas. A senha das três contas fictícias é `AchakiDemo2026!`.
 
-Ao entrar como Ana, somente o fone aparece entre os itens encontrados por ela. Os demais continuam públicos, mas pertencem aos respectivos usuários.
+| Conta de demonstração | E-mail |
+|---|---|
+| Ana, usuária | `ana@demo.achaki.test` |
+| Lucas, usuário | `lucas@demo.achaki.test` |
+| Setor, administrador | `setor@demo.achaki.test` |
 
-## Fluxo público
-- A aplicação abre diretamente na listagem de itens, sem exigir login.
-- Busca e filtros podem ser usados sem autenticação.
-- O detalhe do item é público.
-- O contato do responsável permanece protegido.
-- Ao clicar em **Entrar**, o usuário faz login e retorna ao mesmo item.
-- Depois do login, o botão do WhatsApp é liberado.
+`npm run dev` abre a versão local com banco vazio. Nela, os links de recuperação aparecem no terminal. O ambiente de demonstração e o ambiente vazio têm bancos locais próprios. O protótipo original continua disponível pelo [GitHub Pages](https://luizpedreira.github.io/Achaki/). Seus registros eram gravados em cada navegador. Contas, fotos e objetos dessa versão exigem migração a partir de uma exportação do navegador de origem.
 
-## Cadastro de item encontrado
-- Exige de 1 a 3 fotos.
-- Permite galeria/arquivo ou câmera do celular.
-- Comprime as imagens antes de armazenar.
-- Solicita título, descrição, categoria, data, local e posse atual.
-- A posse atual pode ser **Está comigo** ou **Entreguei na Fatec**.
-- O registro é publicado imediatamente como **Em aberto**.
-- Não há aprovação administrativa bloqueando a publicação.
-- O formulário possui rascunho automático.
+Se houver registros reais na versão anterior, o painel antigo permite exportá-los em JSON no navegador onde foram cadastrados.
 
-A devolução não é informada no cadastro inicial. Ela é registrada depois, quando realmente ocorrer:
-- se o item estiver com o usuário que encontrou, ele registra a devolução em **Meus registros**;
-- se estiver na Fatec, o administrador registra a devolução pelo painel.
+## Publicar no Cloudflare
 
-## Cadastro de item perdido
-- Título, descrição, categoria e data aproximada.
-- Local opcional.
-- Opção de compartilhar contato.
-- Proteção contra solicitação idêntica.
-- Rascunho automático.
+O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as fotos no R2. O bucket `achaki-photos` usa acesso privado e as fotos passam pela API para verificar acesso. O processamento de senhas ocorre em Durable Objects com PBKDF2-SHA256, salt individual e 600 mil iterações.
 
-## Painel administrativo
-- Visão geral com indicadores reais do armazenamento atual.
-- Cadastro de novo item encontrado pelo setor.
-- Gestão de itens encontrados.
-- Alteração de status: Em aberto / Reservado / Devolvido.
-- Edição e exclusão de registros.
-- Registro formal da devolução de itens sob guarda da Fatec.
-- Gestão de itens perdidos.
-- Vinculação de item perdido a item encontrado no processo de recuperação.
-- Histórico separado entre devolvidos e não devolvidos.
-- Gestão de usuários e administradores.
-- Configuração do WhatsApp institucional, categorias e locais.
-- Exportação e importação de backup JSON.
+1. No terminal, entre na conta Cloudflare que contém a zona `jrsites.online`. O R2 precisa estar habilitado nessa conta. Se houver várias contas, defina `CLOUDFLARE_ACCOUNT_ID` com a conta da zona.
 
-## Requisitos funcionais implementados
-- RF01 Cadastro de usuários.
-- RF02 Login e autenticação.
-- RF03 Cadastro de item encontrado com foto, descrição, categoria, local, data e posse atual.
-- RF04 Cadastro de item perdido.
-- RF05 Busca/filtros por palavra-chave, categoria, período, local e status.
-- RF06 Exibição pública dos itens encontrados.
-- RF07 Administrador altera status do item.
-- RF08 Histórico de devolvidos e não devolvidos.
-- RF09 Administrador edita/exclui registros e há validação de duplicidade.
-- RF10 Avaliação do processo de devolução.
-- RF11 Informação da posse atual do item.
-- RF12 Registro formal da devolução e manutenção do histórico.
+   ```sh
+   npx --yes wrangler@4.162.0 login
+   npm run deploy
+   ```
 
-## GitHub Pages
-Envie todos os arquivos e pastas para a raiz do repositório e configure:
+2. O script cria ou reutiliza o D1 `achaki` e o bucket `achaki-photos`. Aplica as migrações e vincula apenas `achaki.jrsites.online`. O resultado esperado é [achaki.jrsites.online/api/health](https://achaki.jrsites.online/api/health) com `{"ok":true}`. Para validar uma configuração já provisionada sem implantar, use `npm run deploy -- --dry-run`.
+3. Cadastre sua conta no site e mantenha a sessão aberta. Gere uma chave aleatória por meio de um gerenciador de senhas e configure o bootstrap usando o comando abaixo. Entre com ela em `/configurar-admin` e, depois de abrir o painel, remova o segredo.
 
-`Settings > Pages > Deploy from a branch > main > /(root)`
+   ```sh
+   npx --yes wrangler@4.162.0 secret put ADMIN_BOOTSTRAP_TOKEN --config wrangler.production.json
+   npx --yes wrangler@4.162.0 secret delete ADMIN_BOOTSTRAP_TOKEN --config wrangler.production.json
+   ```
 
-## Limitação desta versão
-O GitHub Pages não possui banco de dados. Portanto, cadastros e fotos enviados ficam no navegador em que foram criados. Os três itens padrão e suas imagens ficam no próprio repositório e aparecem em qualquer dispositivo.
+4. Entre em **Painel → Configurações** para informar local, horários e WhatsApp institucionais e decidir se os encontrados precisam de revisão antes de aparecer na busca.
 
+### Integrações
 
-## v9 — feedback dos dois lados
-Após uma devolução, o sistema permite duas avaliações independentes:
-- **Quem perdeu/recuperou** avalia como foi receber o item de volta.
-- **Quem encontrou/devolveu** avalia como foi o processo de entrega.
+| Recurso | Configuração |
+|---|---|
+| Recuperação por e-mail | Defina os segredos `RESEND_API_KEY` e `EMAIL_FROM` com um remetente autorizado pelo Resend. Use `wrangler secret put <nome> --config wrangler.production.json`. |
+| Login institucional Microsoft | Cadastre um aplicativo Web no tenant da instituição com a URL de redirecionamento `https://achaki.jrsites.online/api/auth/microsoft/callback`. Defina os segredos `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID` e `MICROSOFT_CLIENT_SECRET`. Para unir uma conta existente ao SSO, entre primeiro nela e use **Vincular conta institucional**, em **Minha conta**. |
+| Sugestão de categoria pela foto | Publique com `npm run deploy -- --suggestions` para ligar o Workers AI. A categoria proposta pode ser alterada antes de publicar o item. |
+| Instalação no celular | No Android, instale pelo navegador compatível. No iPhone, adicione à Tela de Início pelo menu de compartilhamento do Safari. Os registros precisam de conexão. |
+| Etiqueta QR | Gere e baixe uma etiqueta no detalhe de um objeto sob sua guarda ou na lista de encontrados do painel. |
 
-O painel administrativo consolida as duas perspectivas no Histórico. A mesma pessoa não consegue enviar duas vezes a mesma perspectiva. Na devolução direta, também é possível vincular uma solicitação de item perdido para liberar o feedback da pessoa que recuperou o objeto.
+Consulte as páginas oficiais sobre [domínios de Workers](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/), [D1](https://developers.cloudflare.com/d1/get-started/), [R2](https://developers.cloudflare.com/r2/get-started/), [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/limits/) e [Workers AI](https://developers.cloudflare.com/workers-ai/models/resnet-50/).
 
-### Acessos simples para a apresentação
-- Aluno: `aluno@fatec` / `1234`
-- Administrador: `admin@fatec` / `1234`
+## Requisitos e validação
 
+| Requisito | Implementação |
+|---|---|
+| RF01–RF02 | Cadastro com nome, e-mail, senha e telefone, login, perfil e sessão no servidor. |
+| RF03–RF04, RF11 | Encontrados com até três fotos, categoria, descrição, local, data e guarda atual. Perdas privadas com data aproximada e fotos opcionais. |
+| RF05–RF06 | Catálogo público de encontrados com busca por palavra-chave, categoria, local, período e status. |
+| RF07–RF09 | Moderação configurável, reserva, liberação, arquivo reversível, edição e histórico administrativo com exportação CSV. |
+| RF10, RF12 | Devolução direta ou pelo setor, registro de data e destinatário, confirmação de perda associada e avaliações independentes de quem encontrou e de quem recebeu. |
+| RNF01, RNF04–RNF07 | Layout responsivo, navegação por teclado, HTML/CSS/JS, SQLite relacional, GitHub, chaves estrangeiras e índices para evitar registros idênticos. |
+| RNF02 | Senhas armazenadas como hash com salt. |
+| RNF03 | `/api/health` verifica o acesso ao banco. A meta de 95% de disponibilidade depende de medição após a publicação. |
+| RD01–RD04 | SSO institucional configurável, sugestão por imagem, instalação web no celular e etiquetas QR. |
 
-## v10 — cenário de demonstração e status Reservado
-- Ana encontrou o fone: **Em aberto**.
-- Lucas encontrou a carteira: **Reservado para Ana**.
-- Maria encontrou a chave: **Em aberto**, permanecendo com quem encontrou.
-- Ana possui uma solicitação de carteira perdida já relacionada à carteira reservada.
-- **Reservado** significa que um possível proprietário foi identificado e o objeto está separado enquanto a devolução é organizada; não significa que o item já foi entregue.
-- No painel, ao escolher Reservado, abre um formulário para identificar/vincular o possível proprietário.
-- Cadastros e devoluções agora exibem confirmação visual com resumo e próximos passos.
+### Demonstração do fluxo
 
+1. Entre como Ana e registre uma perda.
+2. Em outra janela, entre como Lucas e registre um encontrado da mesma categoria, marcando **Entreguei na Fatec**.
+3. Na conta da Ana, abra a perda e solicite a devolução em **Ver itens compatíveis**.
+4. Entre como setor e acesse **Solicitações**. Aprove o pedido, reserve e registre a entrega.
+5. Abra **Histórico** para conferir os movimentos. Use **Meus registros → Avaliações** em cada conta para avaliar.
 
-## v11 — Visualização de fotos
-Na tela de detalhes, clique/toque na foto do item para abrir a imagem inteira em um visualizador. Se um item tiver mais de uma foto, use as setas ou as teclas ←/→. Esc fecha o visualizador.
+O D1 oferece [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/). Para exportar o banco, use `npx --yes wrangler@4.162.0 d1 export achaki --remote --output backup.sql --config wrangler.production.json`. Mantenha uma cópia do bucket R2 junto do backup para recuperar as fotos.
 
+O trabalho acadêmico original cita Supabase e Vercel. A implementação de produção usa D1, R2 e Cloudflare Workers.
 
-## v13 — cenário limpo para apresentação com dois alunos
-A restauração dos dados iniciais agora deixa o sistema pronto para uma demonstração ao vivo, sem uma solicitação perdida ou reserva já montada.
+### Licenças de componentes
 
-### Contas fáceis
-- Aluno 1: `aluno@fatec` / `1234`
-- Aluno 2: `aluno2@fatec` / `1234`
-- Administrador: `admin@fatec` / `1234`
-
-### Estado inicial
-- Fone de ouvido: cadastrado por Ana (Aluno 1), **Em aberto**.
-- Carteira: cadastrada por Lucas, **Em aberto**.
-- Chave de carro: cadastrada por Maria, **Em aberto**.
-- Nenhuma solicitação de item perdido vem pronta.
-- Nenhum item começa reservado.
-
-Assim, durante a apresentação você pode criar um caso novo do zero: Aluno 1 registra que perdeu um objeto; Aluno 2 registra que encontrou o mesmo objeto; o administrador relaciona os dois, reserva o encontrado e conclui a devolução.
-
-Ao reservar um item, se existir exatamente uma solicitação perdida da mesma categoria, o painel sugere essa correspondência e preenche automaticamente o nome e telefone do possível proprietário. Isso agiliza a demonstração sem realizar a devolução automaticamente.
-
-
-## Novidades da v13
-- Fotos também no cadastro de item perdido (até 3, opcionais).
-- O botão do WhatsApp cria uma solicitação de contato registrada no sistema.
-- Quando o item está com quem encontrou, essa pessoa recebe a solicitação em Meus registros.
-- O responsável pode abrir o WhatsApp, rejeitar a identificação ou confirmar a entrega.
-- Ao confirmar a entrega, o item passa para Devolvido e é associado ao usuário que entrou em contato.
-- Se houver uma solicitação de item perdido vinculada, ela também é marcada como recuperada.
-- Os dois lados podem avaliar a devolução.
-- Em Meus registros > Perdi existe a ação "Meu item foi encontrado", que permite relacionar a solicitação a um item encontrado.
-- O painel administrativo exibe solicitações de contato pendentes quando o objeto está sob guarda da Fatec.
-
-
-## Ajuste v14 — contato sem registro prévio de perda
-Se um aluno encontrar um item na tela pública e iniciar contato pelo WhatsApp sem ter cadastrado a perda antes, o sistema cria automaticamente uma **solicitação de recuperação** em **Meus registros > Perdi**. Ela fica vinculada ao item encontrado e à solicitação de contato. Quando a entrega é confirmada, esse registro passa para recuperado e o aluno pode avaliar a devolução normalmente.
-
-Isso evita obrigar o aluno a voltar e cadastrar manualmente uma perda depois de já ter localizado o objeto.
+- [Inter](https://github.com/rsms/inter), SIL Open Font License 1.1 em `public/fonts/inter.LICENSE.txt`.
+- [QR Creator](https://github.com/nimiq/qr-creator), MIT em `public/vendor/qr-creator.LICENSE.txt`.
