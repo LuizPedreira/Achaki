@@ -167,6 +167,7 @@ test('arquivos públicos, páginas por URL e classificação opcional', async t 
   assert.equal(opened,200);
   assert.match(await page.text(),/styles\.css/);
   assert.match(page.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);
+  assert.equal(page.headers.get('Referrer-Policy'),'same-origin');
   const [assets, css] = await client('/styles.css',undefined,{ raw:true });
   assert.equal(assets,200);
   assert.match(await css.text(),/\.hero-graphic/);

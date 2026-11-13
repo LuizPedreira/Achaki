@@ -174,7 +174,7 @@ export function clientIP(request) {
 export function secureResponse(response, request) {
   const result = new Response(response.body, { status:response.status,statusText:response.statusText,headers:response.headers });
   result.headers.set('X-Content-Type-Options', 'nosniff');
-  result.headers.set('Referrer-Policy', 'no-referrer');
+  result.headers.set('Referrer-Policy', 'same-origin');
   result.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(self)');
   result.headers.set('X-Frame-Options', 'DENY');
   if (new URL(request.url).protocol === 'https:') result.headers.set('Strict-Transport-Security', 'max-age=31536000');

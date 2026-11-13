@@ -89,16 +89,17 @@ export async function reviewContact(env, user, contactId, input) {
   if (action === 'cancel' ? contact.requester_id !== user.id : !manages(item,user)) throw new HttpError(403, 'Você não tem acesso a esta solicitação.');
   const time = stamp();
   const version = item.updated_at;
+  const reviewer = "EXISTS (SELECT 1 FROM users a WHERE a.id = ? AND a.active = 1 AND ((i.custody = 'campus' AND a.role = 'admin') OR (i.custody = 'finder' AND i.author_id = a.id)))";
   const lostAvailable = "EXISTS (SELECT 1 FROM items l WHERE l.id = contacts.lost_id AND l.kind = 'lost' AND l.status = 'open' AND l.archived_at IS NULL)";
   if (action === 'approve') {
     try {
       const results = await env.DB.batch([
         db(env, `UPDATE contacts SET status = 'approved', updated_at = ?
           WHERE id = ? AND status = 'pending' AND ${lostAvailable} AND EXISTS (
-            SELECT 1 FROM items i WHERE i.id = contacts.item_id AND i.updated_at = ? AND i.archived_at IS NULL
+            SELECT 1 FROM items i WHERE i.id = contacts.item_id AND i.updated_at = ? AND i.archived_at IS NULL AND ${reviewer}
               AND i.status IN ('open','reserved') AND (i.reserved_contact_id IS NULL OR i.reserved_contact_id = contacts.id)
               AND (i.reserved_lost_id IS NULL OR i.reserved_lost_id = contacts.lost_id)
-          )`, time, contact.id, version),
+          )`, time, contact.id, version, user.id),
         db(env, `UPDATE items SET status = 'reserved', reservation_name = (SELECT name FROM users WHERE id = ?),
           reserved_contact_id = ?, reserved_lost_id = ?, updated_by = ?, updated_at = ?
           WHERE id = ? AND EXISTS (SELECT 1 FROM contacts WHERE id = ? AND status = 'approved' AND updated_at = ?)`,
@@ -113,7 +114,8 @@ export async function reviewContact(env, user, contactId, input) {
     const next = action === 'cancel' ? 'cancelled' : 'rejected';
     const results = await env.DB.batch([
       db(env, `UPDATE contacts SET status = ?, updated_at = ? WHERE id = ? AND status IN ('pending','approved')
-        AND EXISTS (SELECT 1 FROM items WHERE id = contacts.item_id AND updated_at = ? AND archived_at IS NULL)`, next, time, contact.id, version),
+        AND EXISTS (SELECT 1 FROM items i WHERE i.id = contacts.item_id AND i.updated_at = ? AND i.archived_at IS NULL
+          AND ${action === 'cancel' ? 'contacts.requester_id = ?' : reviewer})`, next, time, contact.id, version, user.id),
       db(env, `UPDATE items SET status = 'open', reservation_name = NULL, reserved_contact_id = NULL,
         reserved_lost_id = NULL, updated_by = ?, updated_at = ?
         WHERE id = ? AND reserved_contact_id = ? AND EXISTS (SELECT 1 FROM contacts WHERE id = ? AND status = ? AND updated_at = ?)`,

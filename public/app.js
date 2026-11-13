@@ -345,7 +345,7 @@ actions.share = async () => {
 };
 
 function claim(item, lostId) {
-  modal('Solicitar devolução', `<p>Descreva um detalhe que ajude a confirmar que “${e(item.title)}” é seu.</p>
+  modal('Solicitar devolução', `<p>Descreva um detalhe que ajude a confirmar que “${e(item.title)}” é seu. Após a aprovação, quem está com o objeto pode entrar em contato pelo WhatsApp para combinar a entrega.</p>
     <form class="stack" id="claim-form">${textarea('Como reconhecer seu objeto?','message','','required minlength="10" maxlength="700" rows="4" placeholder="Ex.: detalhe da capa, marca de uso ou conteúdo…"')}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Enviar solicitação','arrow')}</div></form>`);
   onForm('#claim-form', async data => {
