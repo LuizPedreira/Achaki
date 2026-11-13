@@ -28,7 +28,7 @@ const routes = [
   ['POST', /^\/auth\/register$/, ({ env,request,body }) => auth.register(env,request,body)],
   ['POST', /^\/auth\/login$/, ({ env,request,body }) => auth.login(env,request,body)],
   ['POST', /^\/auth\/logout$/, ({ env,request }) => auth.logout(env,request)],
-  ['POST', /^\/auth\/forgot$/, ({ env,request,body }) => auth.forgot(env,request,body)],
+  ['POST', /^\/auth\/forgot$/, ({ env,request,body,context }) => auth.forgot(env,request,body,context)],
   ['POST', /^\/auth\/reset$/, ({ env,request,body }) => auth.reset(env,request,body)],
   ['GET', /^\/auth\/microsoft$/, ({ env,request,url,user }) => auth.startMicrosoft(env,request,url,user)],
   ['GET', /^\/auth\/microsoft\/callback$/, ({ env,request,url,user }) => auth.finishMicrosoft(env,request,url,user)],
@@ -53,14 +53,20 @@ const routes = [
 const htmlRoute = /^\/(?:item\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|entrar|cadastro|recuperar-senha|redefinir-senha|configurar-admin|perfil|ajuda|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?\/?$/i;
 const assetRoute = /^\/(?:app\.js|icons\.js|styles\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
 
-async function handle(request, env) {
+async function handle(request, env, context) {
   const url = new URL(request.url);
+  if (url.protocol === 'http:' && env.APP_ORIGIN?.startsWith('https://')) {
+    const canonical = new URL(env.APP_ORIGIN);
+    canonical.pathname = url.pathname;
+    canonical.search = url.search;
+    return new Response(null, { status:308,headers:{ Location:canonical.href } });
+  }
   const path = url.pathname;
   if (!path.startsWith('/api/')) {
     if (!['GET','HEAD'].includes(request.method)) throw new HttpError(405,'Método não permitido.');
     if (htmlRoute.test(path)) {
       const origin = new URL('/index.html', request.url);
-      const response = await env.ASSETS.fetch(new Request(origin, request));
+      const response = await env.ASSETS.fetch(new Request(origin, { method:request.method,headers:request.headers }));
       const html = new Response(response.body, { status:response.status,statusText:response.statusText,headers:response.headers });
       html.headers.set('Cache-Control', 'no-cache');
       return html;
@@ -82,17 +88,17 @@ async function handle(request, env) {
   const user = await auth.sessionUser(env,request);
   if (routePath.startsWith('/admin/')) requireAdmin(user);
   const body = mutates && match[3] !== 'binary' ? await readJSON(request) : null;
-  return match[2]({ env, request, url, user, body }, ...routePath.match(match[1]).slice(1));
+  return match[2]({ env, request, url, user, body, context }, ...routePath.match(match[1]).slice(1));
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     try {
-      return secureResponse(await handle(request,env));
+      return secureResponse(await handle(request,env,context),request);
     } catch (error) {
-      if (error instanceof HttpError) return secureResponse(json({ error: error.message },error.status));
+      if (error instanceof HttpError) return secureResponse(json({ error: error.message },error.status),request);
       console.error('Achaki request failed', error.name, error.stack?.split('\n').slice(1,4).join('\n'));
-      return secureResponse(json({ error: 'O sistema não pôde concluir a operação. Tente novamente em instantes.' },500));
+      return secureResponse(json({ error: 'O sistema não pôde concluir a operação. Tente novamente em instantes.' },500),request);
     }
   },
   async scheduled(_controller, env) {

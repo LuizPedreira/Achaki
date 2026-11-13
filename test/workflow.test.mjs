@@ -176,3 +176,19 @@ test('arquivos públicos, páginas por URL e classificação opcional', async t 
   assert.equal((await client('/api/media/suggestion',photo,{ binary:true }))[1].category.id,'eletronicos');
   assert.equal((await client('/api/media',new Uint8Array(30),{ binary:true }))[0],415);
 });
+
+test('o domínio de produção redireciona a HTTP e protege as sessões no HTTPS', async t => {
+  const production = 'https://achaki.jrsites.online';
+  const { env,close } = createLocalEnv({ origin:production });
+  t.after(close);
+  const insecure = await worker.fetch(new Request('http://achaki.jrsites.online/meus-registros'),env);
+  assert.equal(insecure.status,308);
+  assert.equal(insecure.headers.get('Location'),production + '/meus-registros');
+  const registered = await worker.fetch(new Request(production + '/api/auth/register',{
+    method:'POST',headers:{ 'Content-Type':'application/json',Origin:production },
+    body:JSON.stringify(account('Ana Barbosa','ana@example.test'))
+  }),env);
+  assert.equal(registered.status,201);
+  assert.equal(registered.headers.get('Strict-Transport-Security'),'max-age=31536000');
+  assert.match(registered.headers.get('Set-Cookie'),/^__Host-achaki_session=.*; Path=\/; HttpOnly; SameSite=Lax; Secure$/);
+});

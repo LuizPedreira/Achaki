@@ -25,7 +25,7 @@ Se houver registros reais na versão anterior, o painel antigo permite exportá-
 
 ## Publicar no Cloudflare
 
-O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as fotos no R2. O bucket `achaki-photos` usa acesso privado e as fotos passam pela API para verificar acesso. O processamento de senhas ocorre em Durable Objects com PBKDF2-SHA256, salt individual e 600 mil iterações.
+O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as fotos no R2. O bucket `achaki-photos` usa acesso privado e as fotos passam pela API para verificar acesso. O processamento de senhas ocorre em Durable Objects com PBKDF2-SHA256, salt individual e 600 mil iterações. O domínio usa HTTPS e as sessões usam cookies restritos ao host.
 
 1. No terminal, entre na conta Cloudflare que contém a zona `jrsites.online`. O R2 precisa estar habilitado nessa conta. Se houver várias contas, defina `CLOUDFLARE_ACCOUNT_ID` com a conta da zona.
 

@@ -6,8 +6,8 @@ import {
 } from './http.mjs';
 import { derive } from './passwords.mjs';
 
-const SESSION = 'achaki_session';
-const OAUTH = 'achaki_oauth';
+const sessionCookie = request => new URL(request.url).protocol === 'https:' ? '__Host-achaki_session' : 'achaki_session';
+const oauthCookie = request => new URL(request.url).protocol === 'https:' ? '__Host-achaki_oauth' : 'achaki_oauth';
 const ITERATIONS = 600_000;
 const DUMMY_HASH = `pbkdf2-sha256$${ITERATIONS}$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -44,7 +44,7 @@ export function userView(user) {
 }
 
 export async function sessionUser(env, request) {
-  const token = cookieValue(request, SESSION);
+  const token = cookieValue(request, sessionCookie(request));
   if (!TOKEN.test(token)) return null;
   return first(env, `
     SELECT u.*, EXISTS (SELECT 1 FROM identities x WHERE x.user_id = u.id) AS institutional
@@ -55,11 +55,11 @@ export async function sessionUser(env, request) {
 async function newSession(env, request, user, remember) {
   const token = randomToken();
   const duration = remember ? 30 * DAY : DAY;
-  const previous = cookieValue(request, SESSION);
+  const previous = cookieValue(request, sessionCookie(request));
   const changes = [db(env, 'INSERT INTO sessions(token_hash,user_id,expires_at) VALUES (?,?,?)', await digest(token), user.id, now() + duration)];
   if (TOKEN.test(previous)) changes.push(db(env, 'DELETE FROM sessions WHERE token_hash = ?', await digest(previous)));
   await env.DB.batch(changes);
-  return makeCookie(request, SESSION, token, remember ? duration : undefined);
+  return makeCookie(request, sessionCookie(request), token, remember ? duration : undefined);
 }
 
 export async function register(env, request, input) {
@@ -92,9 +92,9 @@ export async function login(env, request, input) {
 }
 
 export async function logout(env, request) {
-  const token = cookieValue(request, SESSION);
+  const token = cookieValue(request, sessionCookie(request));
   if (TOKEN.test(token)) await run(env, 'DELETE FROM sessions WHERE token_hash = ?', await digest(token));
-  return json({}, 200, { 'Set-Cookie': makeCookie(request, SESSION, '', 0) });
+  return json({}, 200, { 'Set-Cookie': makeCookie(request, sessionCookie(request), '', 0) });
 }
 
 export async function profile(env, user, input) {
@@ -116,13 +116,13 @@ export async function changePassword(env, request, user, input) {
     db(env, 'DELETE FROM password_resets WHERE user_id = ? AND EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash = ?)', user.id, user.id, next)
   ]);
   if (!result[0].meta.changes) throw new HttpError(409, 'Sua senha mudou em outra sessão. Entre novamente.');
-  return json({}, 200, { 'Set-Cookie': makeCookie(request, SESSION, '', 0) });
+  return json({}, 200, { 'Set-Cookie': makeCookie(request, sessionCookie(request), '', 0) });
 }
 
 export const emailEnabled = env => Boolean((env.RESEND_API_KEY && env.EMAIL_FROM) || env.MAIL_DEV);
 export const ssoEnabled = env => Boolean(/^[a-f0-9-]{36}$/i.test(env.MICROSOFT_TENANT_ID || '') && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET);
 
-export async function forgot(env, request, input) {
+export async function forgot(env, request, input, context) {
   if (!emailEnabled(env)) throw new HttpError(503, 'A recuperação por e-mail ainda não está disponível. Procure o setor de Achados e Perdidos.');
   const address = email(input.email);
   await throttle(env, `reset-ip:${clientIP(request)}`, 16, 3600);
@@ -140,25 +140,27 @@ export async function forgot(env, request, input) {
     db(env, 'DELETE FROM password_resets WHERE user_id = ?', user.id),
     db(env, 'INSERT INTO password_resets(token_hash,user_id,expires_at) VALUES (?,?,?)', hash, user.id, now() + 1800)
   ]);
-  try {
-    if (env.MAIL_DEV) await env.MAIL_DEV.send({ to: address, url: link.href });
-    else {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `password-reset/${hash}` },
-        signal: AbortSignal.timeout(10000),
-        body: JSON.stringify({
-          from: env.EMAIL_FROM, to: [address], subject: 'Redefina sua senha no Achaki',
-          text: `Para escolher uma nova senha no Achaki, abra ${link.href}\n\nO link vale por 30 minutos. Se você não solicitou a redefinição, ignore este e-mail.`
-        })
-      });
-      if (!response.ok) throw new Error('Email delivery failed');
-    }
-  } catch {
+  const delivery = sendReset(env, address, link.href, hash).catch(async () => {
     await run(env, 'DELETE FROM password_resets WHERE token_hash = ?', hash);
     console.warn('Password reset email delivery failed');
-  }
+  });
+  if (context) context.waitUntil(delivery);
+  else await delivery;
   return json({});
+}
+
+async function sendReset(env, address, link, hash) {
+  if (env.MAIL_DEV) return env.MAIL_DEV.send({ to:address, url:link });
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `password-reset/${hash}` },
+    signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({
+      from: env.EMAIL_FROM, to: [address], subject: 'Redefina sua senha no Achaki',
+      text: `Para escolher uma nova senha no Achaki, abra ${link}\n\nO link vale por 30 minutos. Se você não solicitou a redefinição, ignore este e-mail.`
+    })
+  });
+  if (!response.ok) throw new Error('Email delivery failed');
 }
 
 export async function reset(env, request, input) {
@@ -177,7 +179,7 @@ export async function reset(env, request, input) {
     db(env, 'DELETE FROM sessions WHERE user_id = ? AND EXISTS (SELECT 1 FROM users WHERE id = ? AND password_hash = ?)', record.user_id, record.user_id, password)
   ]);
   if (!changed[0].meta.changes) throw invalid();
-  return json({}, 200, { 'Set-Cookie': makeCookie(request, SESSION, '', 0) });
+  return json({}, 200, { 'Set-Cookie': makeCookie(request, sessionCookie(request), '', 0) });
 }
 
 const issuerFor = env => `https://login.microsoftonline.com/${env.MICROSOFT_TENANT_ID.toLowerCase()}/v2.0`;
@@ -199,7 +201,7 @@ export async function startMicrosoft(env, request, url, user) {
     response_mode: 'query', scope: 'openid profile', state, nonce,
     code_challenge: await digest(verifier), code_challenge_method: 'S256', prompt: 'select_account'
   });
-  return redirect(authorize.href, { 'Set-Cookie': makeCookie(request, OAUTH, state, 600) });
+  return redirect(authorize.href, { 'Set-Cookie': makeCookie(request, oauthCookie(request), state, 600) });
 }
 
 async function microsoftClaims(env, token, nonce) {
@@ -224,11 +226,11 @@ async function microsoftClaims(env, token, nonce) {
 }
 
 export async function finishMicrosoft(env, request, url, user) {
-  const clear = makeCookie(request, OAUTH, '', 0);
+  const clear = makeCookie(request, oauthCookie(request), '', 0);
   const error = message => redirect(`/entrar?institucional=${message}`, { 'Set-Cookie': clear });
   const state = url.searchParams.get('state');
   const code = url.searchParams.get('code');
-  if (!ssoEnabled(env) || !code || !TOKEN.test(state || '') || state !== cookieValue(request, OAUTH)) return error('falhou');
+  if (!ssoEnabled(env) || !code || !TOKEN.test(state || '') || state !== cookieValue(request, oauthCookie(request))) return error('falhou');
   const attempt = await first(env, 'DELETE FROM oauth_states WHERE state_hash = ? AND expires_at > ? RETURNING *', await digest(state), now());
   if (!attempt || (attempt.user_id && attempt.user_id !== user?.id)) return error('falhou');
   try {
