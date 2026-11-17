@@ -156,8 +156,8 @@ async function sendReset(env, address, link, hash) {
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `password-reset/${hash}` },
     signal: AbortSignal.timeout(10000),
     body: JSON.stringify({
-      from: env.EMAIL_FROM, to: [address], subject: 'Redefina sua senha no Achaki',
-      text: `Para escolher uma nova senha no Achaki, abra ${link}\n\nO link vale por 30 minutos. Se você não solicitou a redefinição, ignore este e-mail.`
+      from: env.EMAIL_FROM, to: [address], subject: 'Redefinir senha · Achados e Perdidos',
+      text: `Para escolher uma nova senha no sistema de Achados e Perdidos, abra ${link}\n\nO link vale por 30 minutos. Se você não solicitou a redefinição, ignore este e-mail.`
     })
   });
   if (!response.ok) throw new Error('Email delivery failed');

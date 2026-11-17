@@ -1,6 +1,6 @@
-# Achaki · Achados e Perdidos da Fatec Taquaritinga
+# Sistema de Achados e Perdidos
 
-**[Abrir o Achaki publicado](https://achaki.jrsites.online/)**
+**[Abrir o sistema](https://achaki.jrsites.online/)**
 
 Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
@@ -36,7 +36,7 @@ O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as f
    npm run deploy
    ```
 
-2. O script cria ou reutiliza o D1 `achaki` e o bucket `achaki-photos`. Aplica as migrações e vincula apenas `achaki.jrsites.online`. O resultado esperado é [achaki.jrsites.online/api/health](https://achaki.jrsites.online/api/health) com `{"ok":true}`. Para validar uma configuração já provisionada sem implantar, use `npm run deploy -- --dry-run`.
+2. O script cria ou reutiliza o D1 `achaki` e o bucket `achaki-photos`. Aplica as migrações e configura `achados.jrsites.online` como endereço principal. O endereço anterior redireciona para ele. O resultado esperado é [achados.jrsites.online/api/health](https://achados.jrsites.online/api/health) com `{"ok":true}`. Para validar uma configuração já provisionada sem implantar, use `npm run deploy -- --dry-run`.
 3. Cadastre sua conta no site e mantenha a sessão aberta. Gere uma chave aleatória por meio de um gerenciador de senhas e configure o bootstrap usando o comando abaixo. Entre com ela em `/configurar-admin` e, depois de abrir o painel, remova o segredo.
 
    ```sh
@@ -44,14 +44,14 @@ O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as f
    npx --yes wrangler@4.162.0 secret delete ADMIN_BOOTSTRAP_TOKEN --config wrangler.production.json
    ```
 
-4. Entre em **Painel → Configurações** para informar local, horários e WhatsApp institucionais e decidir se os encontrados precisam de revisão antes de aparecer na busca.
+4. Entre em **Painel → Configurações** para informar local, horários e WhatsApp institucionais e decidir se os encontrados precisam de revisão antes de aparecer na busca. Altere `APP_CAMPUS_NAME` em `wrangler.jsonc` para usar o nome de outro campus ou deixe o valor vazio para ocultar o subtítulo.
 
 ### Integrações
 
 | Recurso | Configuração |
 |---|---|
 | Recuperação por e-mail | Defina os segredos `RESEND_API_KEY` e `EMAIL_FROM` com um remetente autorizado pelo Resend. Use `wrangler secret put <nome> --config wrangler.production.json`. |
-| Login institucional Microsoft | Cadastre um aplicativo Web no tenant da instituição com a URL de redirecionamento `https://achaki.jrsites.online/api/auth/microsoft/callback`. Defina os segredos `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID` e `MICROSOFT_CLIENT_SECRET`. Para unir uma conta existente ao SSO, entre primeiro nela e use **Vincular conta institucional**, em **Minha conta**. |
+| Login institucional Microsoft | Cadastre um aplicativo Web no tenant da instituição com a URL de redirecionamento `https://achados.jrsites.online/api/auth/microsoft/callback`. Defina os segredos `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID` e `MICROSOFT_CLIENT_SECRET`. Para unir uma conta existente ao SSO, entre primeiro nela e use **Vincular conta institucional**, em **Minha conta**. |
 | Sugestão de categoria pela foto | Publique com `npm run deploy -- --suggestions` para ligar o Workers AI. A categoria proposta pode ser alterada antes de publicar o item. |
 | Instalação no celular | No Android, instale pelo navegador compatível. No iPhone, adicione à Tela de Início pelo menu de compartilhamento do Safari. Os registros precisam de conexão. |
 | Etiqueta QR | Gere e baixe uma etiqueta no detalhe de um objeto sob sua guarda ou na lista de encontrados do painel. |
@@ -75,7 +75,7 @@ Consulte as páginas oficiais sobre [domínios de Workers](https://developers.cl
 ### Demonstração do fluxo
 
 1. Entre como Ana e registre uma perda.
-2. Em outra janela, entre como Lucas e registre um encontrado da mesma categoria, marcando **Entreguei na Fatec**.
+2. Em outra janela, entre como Lucas e registre um encontrado da mesma categoria, marcando **Entreguei no setor**.
 3. Na conta da Ana, abra a perda e solicite a devolução em **Ver itens compatíveis**.
 4. Entre como setor e acesse **Solicitações**. Aprove o pedido, reserve e registre a entrega.
 5. Abra **Histórico** para conferir os movimentos. Use **Meus registros → Avaliações** em cada conta para avaliar.

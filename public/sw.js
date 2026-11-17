@@ -1,4 +1,4 @@
-const CACHE = 'achaki-shell-v2';
+const CACHE = 'achados-shell-v3';
 const SHELL = ['/', '/styles.css', '/app.js', '/icons.js', '/favicon.png', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/inter.woff2'];
 
 self.addEventListener('install', event => {
@@ -7,7 +7,7 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(
-    keys.filter(key => key.startsWith('achaki-shell-') && key !== CACHE).map(key => caches.delete(key))
+    keys.filter(key => (key.startsWith('achaki-shell-') || key.startsWith('achados-shell-')) && key !== CACHE).map(key => caches.delete(key))
   )).then(() => self.clients.claim()));
 });
 

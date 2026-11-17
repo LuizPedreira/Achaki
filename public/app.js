@@ -3,10 +3,11 @@ import { icon } from './icons.js';
 const site = document.querySelector('#site');
 const dialog = document.querySelector('#dialog');
 const toast = document.querySelector('#toast');
-const session = { user: null, categories: [], locations: [], sector: {}, features: {} };
+const siteName = 'Achados e Perdidos';
+const session = { user: null, categories: [], locations: [], sector: {}, features: {}, campus: '' };
 const statusText = { open: 'Em aberto', reserved: 'Reservado', returned: 'Devolvido', recovered: 'Recuperado',
   pending: 'Pendente', approved: 'Aprovada', rejected: 'Recusada', cancelled: 'Cancelada', delivered: 'Entregue' };
-const custodyText = { campus: 'No setor da Fatec', finder: 'Com quem encontrou' };
+const custodyText = { campus: 'No setor de Achados e Perdidos', finder: 'Com quem encontrou' };
 const publicationText = { public: 'Publicado', pending: 'Em revisão', hidden: 'Oculto', private: 'Privado' };
 const kindText = { found: 'Encontrado', lost: 'Perdido' };
 const clock = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' });
@@ -35,10 +36,10 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
     response = await fetch(`/api${path}`, { method, body, headers, credentials: 'same-origin' });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
-    throw new Error('Sem conexão com o Achaki. Confira sua internet e tente novamente.');
+    throw new Error('Sem conexão com o sistema. Confira sua internet e tente novamente.');
   }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(data.error || 'O Achaki está temporariamente indisponível.'), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(data.error || 'O sistema está temporariamente indisponível.'), { status: response.status });
   return data;
 }
 
@@ -82,22 +83,24 @@ const itemHref = id => `/item/${encodeURIComponent(id)}`;
 const entry = (path, name, symbol) => `<a href="${path}" data-nav ${location.pathname === path ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${name}</span></a>`;
 
 function brand() {
-  return `<a class="brand" href="/" data-nav aria-label="Achaki, início"><span class="brand-mark">${icon('target')}</span><span>achaki<span class="brand-point">.</span><small>FATEC TAQUARITINGA</small></span></a>`;
+  return `<a class="brand" href="/" data-nav aria-label="${siteName}, início"><span class="brand-mark">${icon('box')}</span>
+    <span>${siteName}${session.campus ? `<small>${e(session.campus)}</small>` : ''}</span></a>`;
 }
 
-function shell(content, { wide = false, auth = false } = {}) {
+function shell(content, { wide = false, auth = false, home = false } = {}) {
+  if (auth) return `<main id="conteudo" tabindex="-1" class="main auth-main">${content}</main>`;
   const user = session.user;
   const profile = user ? `<a class="profile-link" data-nav href="/perfil"><span class="avatar">${e(initial(user.name))}</span><span>${e(user.name.split(' ')[0])}</span></a>`
     : link('/entrar','Entrar',{ cls:'button secondary sign-in',symbol:'user' });
   return `<header class="header"><div class="header-inner">${brand()}<nav class="top-nav" aria-label="Principal">
-    ${entry('/','Explorar','search')}${user ? entry('/meus-registros','Meus registros','list') : ''}${entry('/ajuda','Como funciona','help')}
+    ${entry('/','Início','home')}${entry('/novo/lost','Perdi algo','search')}${user ? entry('/meus-registros','Meus registros','list') : ''}
     ${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : ''}</nav>
-    <div class="header-actions">${profile}${auth ? '' : link('/novo','Registrar item',{ cls:'button primary header-cta',symbol:'plus' })}</div></div></header>
-    <main id="conteudo" tabindex="-1" class="${wide ? 'main admin-main' : 'main'}">${content}</main>
-    <footer class="footer"><div><span class="footer-brand">Achaki<span>.</span></span><small>Projeto acadêmico · Fatec Taquaritinga</small></div>
+    <div class="header-actions">${profile}${link('/novo','Registrar item',{ cls:'button primary header-cta',symbol:'plus' })}</div></div></header>
+    <main id="conteudo" tabindex="-1" class="main${wide ? ' admin-main' : home ? ' home-main' : ''}">${content}</main>
+    <footer class="footer"><div><small>Projeto acadêmico${session.campus ? ` · ${e(session.campus)}` : ''}</small></div>
       <div>${link('/ajuda','Como funciona',{ cls:'text-link' })}<button type="button" class="text-link install-link" data-action="install" ${installPrompt ? '' : 'hidden'}>Instalar aplicativo</button></div></footer>
-    <nav class="dock" aria-label="Navegação móvel">${entry('/','Explorar','search')}${entry('/novo','Registrar','plus')}
-    ${entry('/meus-registros','Registros','list')}${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : entry(user ? '/perfil' : '/entrar','Conta','user')}</nav>`;
+    <nav class="dock" aria-label="Navegação móvel">${entry('/','Início','home')}${entry('/novo/lost','Perdi algo','search')}${entry('/novo','Registrar','plus')}
+    ${entry('/meus-registros','Registros','list')}${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : entry(user ? '/perfil' : '/entrar','Perfil','user')}</nav>`;
 }
 
 function header(title, description, actions = '', kicker = '') {
@@ -167,36 +170,40 @@ function cover(item) {
 
 function card(item) {
   return `<article class="item-card"><a href="${itemHref(item.id)}" class="item-link" data-nav>
-    <div class="item-cover">${cover(item)}${badge(item.status)}</div>
-    <div class="item-body"><div class="item-category">${e(item.category)}</div><h3>${e(item.title)}</h3>
-    <p>${e(item.description)}</p><div class="item-meta">${rowInfo('pin',item.location || 'Local não informado')}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
-    <div class="item-bottom"><span>Ver detalhes</span>${icon('arrow')}</div></div></a></article>`;
+    <div class="item-cover">${cover(item)}</div>
+    <div class="item-body"><div class="item-top"><span class="item-category">${e(item.category)}</span>${badge(item.status)}</div>
+      <h3>${e(item.title)}</h3><div class="item-meta">${rowInfo('pin',item.location || 'Local não informado')}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
+    </div></a></article>`;
 }
 
-function homeSkeleton() {
-  return `<div class="hero"><div class="hero-content"><div class="hero-kicker"><span></span> Achados e Perdidos do campus</div>
-  <h1>Perdeu alguma coisa<span>?</span></h1><p>Confira o que apareceu pelo campus ou registre um objeto que você encontrou.</p>
-  <form id="search-form" class="search-form" role="search">${icon('search')}<input name="q" value="${e(new URLSearchParams(location.search).get('q'))}" aria-label="Buscar objetos" placeholder="Busque por carteira, chave, fone…"
-    maxlength="120"><button type="submit" class="button primary">Buscar</button></form>
-  <div class="hero-actions">${link('/novo/found','Encontrei um item',{ cls:'button dark',symbol:'plus' })}${link('/novo/lost','Registrar uma perda',{ cls:'button hero-outline',symbol:'target' })}</div></div>
-  <div class="hero-graphic" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div>
-  <div class="graphic-box">${icon('box')}</div><div class="graphic-pin">${icon('pin')}</div><div class="graphic-star">${icon('spark')}</div></div></div>`;
+function homeControls(params, filterCount) {
+  return `<h1 class="visually-hidden">${siteName}</h1><div class="search-row">
+    <form id="search-form" class="search-form" role="search">
+      <button class="button search-submit" type="submit" aria-label="Buscar">${icon('search')}</button>
+      <input name="q" type="search" value="${e(params.get('q'))}" aria-label="Buscar por palavra-chave" placeholder="Buscar por palavra-chave" maxlength="120">
+    </form>
+    ${btn('filters',filterCount ? `<span class="count">${filterCount}</span>` : '','filter','filter-square','aria-label="Filtros"')}
+  </div><div class="quick-grid">
+    ${link('/novo/found',`<span class="quick-icon">${icon('plus')}</span><span><strong>Encontrei um item</strong><small>Registrar achado</small></span>`,{ cls:'quick-card found' })}
+    ${link('/novo/lost',`<span class="quick-icon">${icon('search')}</span><span><strong>Perdi um item</strong><small>Registrar perda</small></span>`,{ cls:'quick-card lost' })}
+  </div>`;
 }
 
 async function home(url, token) {
   const data = await api(`/items${url.search}`);
   if (token !== navigation) return;
   const category = url.searchParams.get('category') || '';
-  const otherFilters = ['status','location','from','to'].filter(key => url.searchParams.has(key)).length;
-  const chips = [['','Todos os itens'], ...session.categories.map(cat => [cat.id,cat.name])].map(([value,label]) =>
+  const filterCount = ['category','status','location','from','to'].filter(key => url.searchParams.has(key)).length;
+  const filtered = filterCount || url.searchParams.has('q');
+  const chips = [['','Todos'], ...session.categories.map(cat => [cat.id,cat.name])].map(([value,label]) =>
     link(withQuery(url.pathname + url.search,'category',value),e(label),{ cls:`chip ${value === category ? 'on' : ''}`,attrs:value === category ? 'aria-current="true"' : '' })).join('');
-  site.innerHTML = shell(`${homeSkeleton()}<section class="results" aria-labelledby="results-heading">
-    <div class="section-head"><div><h2 id="results-heading">Itens encontrados</h2><p>${data.total === 1 ? '1 objeto encontrado' : `${data.total} objetos encontrados`}</p></div>
-    ${btn('filters',`Filtros${otherFilters ? ` <span class="count">${otherFilters}</span>` : ''}`,'filter')}</div>
+  site.innerHTML = shell(`${homeControls(url.searchParams,filterCount)}<section class="results" aria-labelledby="results-heading">
     <div class="chips" aria-label="Categorias">${chips}</div>
+    <div class="section-head"><h2 id="results-heading">${filtered ? 'Resultados da busca' : 'Itens encontrados recentemente'}</h2>
+      ${filtered ? link('/','Ver todos',{ cls:'text-link' }) : ''}</div>
     ${data.items.length ? `<div class="item-grid">${data.items.map(card).join('')}</div>${pager(url.pathname + url.search,data)}`
-      : empty('Nenhum item por aqui',url.search ? 'Tente outro termo ou ajuste os filtros da busca.' : 'Os objetos encontrados no campus vão aparecer aqui.',
-        url.search ? link('/','Limpar busca') : link('/novo/found','Registrar um item',{ cls:'button primary',symbol:'plus' }),'search')}</section>`);
+      : empty('Nenhum item encontrado',filtered ? 'Tente outro termo ou ajuste os filtros da busca.' : 'Os objetos registrados vão aparecer aqui.',
+        '','search')}</section>`,{ home:true });
   onForm('#search-form', ({ q }) => {
     go(withQuery(url.pathname + url.search, 'q', q.trim()), { keepScroll: true });
   });
@@ -205,6 +212,7 @@ async function home(url, token) {
 actions.filters = () => {
   const params = new URLSearchParams(location.search);
   modal('Filtrar itens', `<form class="stack" id="filters-form">
+    ${select('Categoria','category',categoryOptions('Todas as categorias'),params.get('category') || '')}
     ${select('Status','status',[['','Todos os status'], ...displayStatus()],params.get('status') || '')}
     ${input('Local','location',params.get('location'),'list="locations" placeholder="Ex.: Biblioteca" maxlength="120"')}<datalist id="locations">${locationOptions()}</datalist>
     <div class="form-grid">${input('A partir de','from',params.get('from'),`type="date" max="${today()}"`)}
@@ -234,7 +242,7 @@ function authPage(path, url) {
   const next = authNext(url);
   const target = next ? `?next=${encodeURIComponent(next)}` : '';
   const authTypes = {
-    '/entrar': ['Entrar no Achaki','Acompanhe seus registros e solicitações.','Entrar'],
+    '/entrar': ['Login','Entre para registrar objetos ou acompanhar suas solicitações.','Entrar'],
     '/cadastro': ['Criar sua conta','Cadastre-se para registrar objetos e solicitar a devolução.','Criar conta'],
     '/recuperar-senha': ['Recuperar senha','Informe o e-mail da conta para receber um link de redefinição.','Enviar link'],
     '/redefinir-senha': ['Escolher nova senha','Use uma senha com pelo menos 10 caracteres.','Salvar nova senha']
@@ -247,9 +255,11 @@ function authPage(path, url) {
   const unavailable = forgot && !session.features.reset;
   const institutional = url.searchParams.get('institucional');
   const institutionMessage = institutional === 'vinculado' ? 'Esta conta institucional já está vinculada.' : institutional === 'falhou' ? 'Não foi possível entrar com a conta institucional. Tente novamente.' : '';
-  site.innerHTML = shell(`<section class="auth-wrap"><div class="auth-side"><span class="auth-icon">${icon(login || register ? 'target' : 'lock')}</span>
-    <span class="eyebrow">Fatec Taquaritinga</span><h2>Uma conta.<br>Seus objetos e registros.</h2><p>Acompanhe em um só lugar o que você perdeu, encontrou ou recuperou no campus.</p></div>
-    <div class="auth-form panel"><div class="form-heading"><h1>${title}</h1><p>${description}</p></div>
+  site.innerHTML = shell(`<section class="auth-wrap panel"><div class="auth-titlebar">
+    ${link(login ? '/' : `/entrar${target}`,'',{ cls:'button secondary auth-back',symbol:'back',attrs:'aria-label="Voltar"' })}
+    <span>${title}</span></div><div class="auth-form">
+    <div class="form-heading">${login ? `<span class="auth-icon">${icon('box')}</span>` : ''}
+      <h1>${login ? siteName : title}</h1>${login && session.campus ? `<small class="campus-name">${e(session.campus)}</small>` : ''}<p>${description}</p></div>
     ${unavailable ? `<div class="notice">A recuperação automática por e-mail ainda não está disponível. Procure o setor de Achados e Perdidos.</div>${link('/entrar','Voltar para o login')}` :
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
       ${!reset ? input('E-mail','email','','type="email" required maxlength="254" autocomplete="username" placeholder="voce@exemplo.com"') : ''}
@@ -357,7 +367,7 @@ function claim(item, lostId) {
 
 async function qrLabel(item) {
   const { default: QR } = await import('./vendor/qr-creator.js');
-  modal('Etiqueta do objeto', `<div class="qr-label"><strong>Achaki · Fatec Taquaritinga</strong><p>${e(item.title)}</p>
+  modal('Etiqueta do objeto', `<div class="qr-label"><strong>${siteName}</strong><p>${e(item.title)}</p>
     <div id="qr-code" aria-label="QR Code para consultar o item"></div><small>${e(item.id.slice(0,8).toUpperCase())}</small></div>
     <div class="form-actions">${btn('qr-download','Baixar etiqueta','download','primary')}</div>`);
   QR.render({ text:new URL(itemHref(item.id),location.origin).href,radius:0,ecLevel:'M',fill:'#151515',background:'#ffffff',size:240 },qs('#qr-code'));
@@ -368,12 +378,12 @@ async function qrLabel(item) {
     const ctx = label.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0,0,320,365);
     ctx.textAlign = 'center'; ctx.fillStyle = '#171615'; ctx.font = 'bold 17px sans-serif';
-    ctx.fillText('ACHAKI · FATEC',160,36);
+    ctx.fillText(siteName.toUpperCase(),160,36);
     ctx.font = '14px sans-serif'; ctx.fillText(item.title,160,63,275);
     ctx.drawImage(code,40,79);
     ctx.font = '13px monospace'; ctx.fillText(item.id.slice(0,8).toUpperCase(),160,339);
     const a = document.createElement('a');
-    a.href = label.toDataURL('image/png'); a.download = `achaki-${item.id.slice(0,8)}.png`; a.click();
+    a.href = label.toDataURL('image/png'); a.download = `achados-e-perdidos-${item.id.slice(0,8)}.png`; a.click();
   };
 }
 
@@ -425,8 +435,8 @@ function itemForm(kind) {
       <p class="hint">${found ? 'De uma a três fotos.' : 'Até três fotos.'} Evite mostrar documentos, números ou rostos.</p></section>
       ${itemFields(kind,draft)}
       ${found ? `<fieldset class="custody"><legend>Com quem o item está?</legend>
-        <label class="choice-option"><input type="radio" name="custody" value="finder" ${checked(draft.custody !== 'campus')}>${icon('user')}<span><b>Está comigo</b><small>Eu combino a entrega pelo Achaki.</small></span></label>
-        <label class="choice-option"><input type="radio" name="custody" value="campus" ${checked(draft.custody === 'campus')}>${icon('building')}<span><b>Entreguei na Fatec</b><small>O setor confirma a retirada.</small></span></label></fieldset>` :
+        <label class="choice-option"><input type="radio" name="custody" value="finder" ${checked(draft.custody !== 'campus')}>${icon('user')}<span><b>Está comigo</b><small>Eu combino a entrega com quem perdeu.</small></span></label>
+        <label class="choice-option"><input type="radio" name="custody" value="campus" ${checked(draft.custody === 'campus')}>${icon('building')}<span><b>Entreguei no setor</b><small>O setor confirma a retirada.</small></span></label></fieldset>` :
         `<label class="check"><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone)}>Compartilhar meu WhatsApp com o setor para tratar desta perda</label>`}
       <div class="form-error" role="alert"></div><div class="form-actions">${link('/novo','Voltar')}${submit(found ? 'Publicar item' : 'Registrar perda','arrow')}</div></form>
     <aside class="panel side-note"><span class="choice-icon">${icon(found ? 'shield' : 'target')}</span><h2>${found ? 'Foto e descrição' : 'Como recuperar'}</h2>
@@ -569,7 +579,7 @@ function recordCard(item) {
   const mine = session.user.id === item.authorId;
   const controls = [];
   if (found && active && item.custody === 'finder' && mine) {
-    controls.push(btn('transfer','Entreguei na Fatec','building','secondary',`data-id="${item.id}"`));
+    controls.push(btn('transfer','Entreguei no setor','building','secondary',`data-id="${item.id}"`));
     controls.push(btn('return-record','Registrar devolução','check','primary',`data-id="${item.id}"`));
   }
   if (!found && active) controls.push(btn('matches','Ver itens compatíveis','search','secondary',`data-id="${item.id}"`));
@@ -628,7 +638,7 @@ async function records(url, token) {
 
 actions.transfer = button => {
   const item = button.dataset.id;
-  confirmAction('Entregou o objeto à Fatec?','O setor ficará responsável por analisar solicitações e registrar a devolução.',
+  confirmAction('Entregou o objeto ao setor?','O setor ficará responsável por analisar solicitações e registrar a devolução.',
     async () => { await api(`/items/${item}/transfer`,{ method:'POST',body:{} }); notify('Guarda atualizada.'); go(location.pathname + location.search); },'Confirmar entrega ao setor');
 };
 
@@ -714,7 +724,7 @@ function profilePage(url) {
   if (!needUser('/perfil')) return;
   const user = session.user;
   const institutional = url.searchParams.get('institucional');
-  site.innerHTML = shell(`${header('Minha conta','Gerencie seus dados e seu acesso ao Achaki.')}
+  site.innerHTML = shell(`${header('Minha conta','Gerencie seus dados e seu acesso ao sistema.')}
     <div class="edit-grid"><form class="panel editor stack" id="profile-form">
     <div class="profile-heading"><span class="avatar avatar-large">${e(initial(user.name))}</span><div><h2>${e(user.name)}</h2><p>${user.role === 'admin' ? 'Administração' : 'Conta pessoal'}</p></div></div>
     ${institutional === 'novo' ? '<p class="notice">Informe seu telefone para poder registrar um item ou solicitar uma devolução.</p>' : ''}
@@ -737,7 +747,7 @@ function profilePage(url) {
 
 function firstAdmin() {
   if (!needUser('/configurar-admin')) return;
-  site.innerHTML = shell(`${header('Ativar primeira administração','Use a chave de configuração com a conta que vai administrar o Achaki.')}
+  site.innerHTML = shell(`${header('Ativar primeira administração','Use a chave de configuração com a conta que vai administrar o sistema.')}
     <form class="panel editor stack settings-form" id="bootstrap-form">
     ${input('Chave de configuração','token','','type="password" required minlength="32" maxlength="512" autocomplete="off"')}
     <div class="form-error" role="alert"></div><div class="form-actions">${submit('Ativar administração','check')}</div></form>`);
@@ -773,13 +783,13 @@ actions.logout = () => confirmAction('Sair da conta?','Você pode entrar novamen
 },'Sair');
 
 function helpPage() {
-  site.innerHTML = shell(`${header('Como funciona','Achados e Perdidos da Fatec Taquaritinga.')}
+  site.innerHTML = shell(`${header('Como funciona','Consulte, registre e recupere objetos no campus.')}
     <div class="help-layout"><section class="panel editor">
     <div class="help-step"><span class="choice-icon">${icon('search')}</span><div><h2>Procure o objeto</h2><p>Explore os encontrados por categoria, data, local ou palavra-chave. Se ainda não o encontrou, registre a perda e acompanhe possíveis correspondências.</p></div></div>
-    <div class="help-step"><span class="choice-icon">${icon('camera')}</span><div><h2>Registre um encontrado</h2><p>Adicione uma foto, descreva o objeto, indique onde foi encontrado e informe se está com você ou com o setor da Fatec.</p></div></div>
+    <div class="help-step"><span class="choice-icon">${icon('camera')}</span><div><h2>Registre um objeto encontrado</h2><p>Adicione uma foto, descreva o objeto e informe onde ele foi encontrado e quem está com ele.</p></div></div>
     <div class="help-step"><span class="choice-icon">${icon('check')}</span><div><h2>Combine a retirada</h2><p>Envie uma solicitação com um detalhe do objeto. Depois que o responsável confirmar a identificação, acompanhe a retirada em Meus registros.</p></div></div></section>
     <aside class="panel side-note"><span class="choice-icon">${icon('building')}</span><h2>Setor de Achados e Perdidos</h2>
-      <p>${e(session.sector.location || 'Fatec Taquaritinga')}</p>${session.sector.hours ? `<p>${e(session.sector.hours)}</p>` : ''}
+      ${session.sector.location ? `<p>${e(session.sector.location)}</p>` : ''}${session.sector.hours ? `<p>${e(session.sector.hours)}</p>` : ''}
       ${link('/novo','Registrar item',{ cls:'button primary',symbol:'plus' })}</aside></div>`);
 }
 
@@ -929,7 +939,7 @@ function bindAdminItems(items) {
     ['archive','Arquivar registro','O registro sairá da listagem ativa e solicitações pendentes serão encerradas.'],
     ['restore','Restaurar registro','O registro voltará para a listagem ativa.'],
     ['reopen','Liberar reserva','O objeto ficará em aberto e a solicitação aprovada voltará para análise.'],
-    ['receive','Receber no setor','Confirme que o objeto está fisicamente com o setor de Achados e Perdidos da Fatec.']
+    ['receive','Receber no setor','Confirme que o objeto foi entregue ao setor de Achados e Perdidos.']
   ]) {
     actions[`admin-${action}`] = button => confirmAction(title,text,() => update(itemFor(button),action),title);
   }
@@ -1041,7 +1051,8 @@ async function render() {
   const url = new URL(location.href);
   const path = url.pathname.replace(/\/$/,'') || '/';
   const titles = { '/':'Achados e Perdidos','/novo':'Registrar item','/meus-registros':'Meus registros','/entrar':'Entrar','/cadastro':'Criar conta','/perfil':'Minha conta','/ajuda':'Como funciona' };
-  document.title = `${titles[path] || (path.startsWith('/painel') ? 'Painel' : 'Achados e Perdidos')} · Achaki`;
+  const pageTitle = path.startsWith('/painel') ? 'Painel administrativo' : titles[path];
+  document.title = pageTitle && pageTitle !== siteName ? `${pageTitle} · ${siteName}` : siteName;
   try {
     if (path === '/') return await home(url,token);
     if (path === '/novo') return newChoice();
@@ -1103,9 +1114,9 @@ window.addEventListener('beforeinstallprompt',event => {
   document.querySelectorAll('.install-link').forEach(element => { element.hidden = false; });
 });
 
-site.innerHTML = shell(`<div class="loading" role="status">Carregando Achaki…</div>`);
+site.innerHTML = shell(`<div class="loading" role="status">Carregando…</div>`);
 try { await refreshSession(); await render(); }
 catch (error) {
-  site.innerHTML = shell(empty('O Achaki está indisponível agora',error.message,btn('retry','Tentar novamente','history','primary'),'search'));
+  site.innerHTML = shell(empty('Sistema indisponível',error.message,btn('retry','Tentar novamente','history','primary'),'search'));
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});

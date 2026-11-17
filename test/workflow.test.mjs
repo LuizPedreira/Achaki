@@ -170,7 +170,7 @@ test('arquivos públicos, páginas por URL e classificação opcional', async t 
   assert.equal(page.headers.get('Referrer-Policy'),'same-origin');
   const [assets, css] = await client('/styles.css',undefined,{ raw:true });
   assert.equal(assets,200);
-  assert.match(await css.text(),/\.hero-graphic/);
+  assert.match(await css.text(),/\.quick-card\.found/);
   assert.equal((await client('/api/health'))[0],200);
   assert.equal((await client('/api/media/suggestion',photo,{ binary:true }))[0],401);
   await client('/api/auth/register',account('Ana Barbosa','ana@example.test'));
@@ -179,12 +179,15 @@ test('arquivos públicos, páginas por URL e classificação opcional', async t 
 });
 
 test('o domínio de produção redireciona a HTTP e protege as sessões no HTTPS', async t => {
-  const production = 'https://achaki.jrsites.online';
+  const production = 'https://achados.jrsites.online';
   const { env,close } = createLocalEnv({ origin:production });
   t.after(close);
-  const insecure = await worker.fetch(new Request('http://achaki.jrsites.online/meus-registros'),env);
+  const insecure = await worker.fetch(new Request('http://achados.jrsites.online/meus-registros'),env);
   assert.equal(insecure.status,308);
   assert.equal(insecure.headers.get('Location'),production + '/meus-registros');
+  const legacy = await worker.fetch(new Request('https://achaki.jrsites.online/entrar?next=%2Fpainel'),env);
+  assert.equal(legacy.status,308);
+  assert.equal(legacy.headers.get('Location'),production + '/entrar?next=%2Fpainel');
   const registered = await worker.fetch(new Request(production + '/api/auth/register',{
     method:'POST',headers:{ 'Content-Type':'application/json',Origin:production },
     body:JSON.stringify(account('Ana Barbosa','ana@example.test'))

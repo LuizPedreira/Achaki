@@ -1,13 +1,13 @@
 {
   "id": "/",
-  "name": "Achaki · Achados e Perdidos",
-  "short_name": "Achaki",
+  "name": "Achados e Perdidos",
+  "short_name": "Achados",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "theme_color": "#faf8f6",
-  "background_color": "#faf8f6",
+  "theme_color": "#f5f7fa",
+  "background_color": "#f5f7fa",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }

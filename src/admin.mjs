@@ -195,9 +195,9 @@ export async function exportHistory(env, search) {
   const csv = [
     ['ID','Tipo','Título','Categoria','Local','Status','Data do registro do objeto','Guarda','Data da devolução','Quem recebeu','Observações','Arquivado'],
     ...records.map(r => [r.id,r.kind === 'found' ? 'Encontrado' : 'Perdido',r.title,r.category,r.location,status[r.status],r.occurred_on,
-      r.custody === 'campus' ? 'Fatec' : r.custody === 'finder' ? 'Quem encontrou' : '',r.returned_on,r.recipient_name,r.notes,r.archived_at])
+      r.custody === 'campus' ? 'Setor de Achados e Perdidos' : r.custody === 'finder' ? 'Quem encontrou' : '',r.returned_on,r.recipient_name,r.notes,r.archived_at])
   ].map(row => row.map(cells).join(';')).join('\r\n');
   return new Response('\ufeff' + csv, { headers: {
-    'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="achaki-historico.csv"', 'Cache-Control': 'no-store'
+    'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="historico-achados-e-perdidos.csv"', 'Cache-Control': 'no-store'
   } });
 }

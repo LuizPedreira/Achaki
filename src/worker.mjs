@@ -7,7 +7,7 @@ import * as admin from './admin.mjs';
 export { PasswordDerivations } from './passwords.mjs';
 
 const routes = [
-  ['GET', /^\/meta$/, async ({ env, user }) => json({ ...await items.metadata(env), user: auth.userView(user),
+  ['GET', /^\/meta$/, async ({ env, user }) => json({ ...await items.metadata(env), user: auth.userView(user), campus: env.APP_CAMPUS_NAME || '',
     features: { sso: auth.ssoEnabled(env), reset: auth.emailEnabled(env), suggestions: media.suggestionsEnabled(env) } })],
   ['GET', /^\/items$/, async ({ env, url }) => json(await items.listItems(env, url.searchParams))],
   ['GET', /^\/items\/([^/]+)$/, ({ env, user }, id) => items.itemDetails(env,user,id)],
@@ -55,8 +55,8 @@ const assetRoute = /^\/(?:app\.js|icons\.js|styles\.css|favicon\.png|manifest\.w
 
 async function handle(request, env, context) {
   const url = new URL(request.url);
-  if (url.protocol === 'http:' && env.APP_ORIGIN?.startsWith('https://')) {
-    const canonical = new URL(env.APP_ORIGIN);
+  const canonical = new URL(env.APP_ORIGIN || url.href);
+  if (canonical.protocol === 'https:' && url.origin !== canonical.origin) {
     canonical.pathname = url.pathname;
     canonical.search = url.search;
     return new Response(null, { status:308,headers:{ Location:canonical.href } });
@@ -97,7 +97,7 @@ export default {
       return secureResponse(await handle(request,env,context),request);
     } catch (error) {
       if (error instanceof HttpError) return secureResponse(json({ error: error.message },error.status),request);
-      console.error('Achaki request failed', error.name, error.stack?.split('\n').slice(1,4).join('\n'));
+      console.error('Lost and found request failed', error.name, error.stack?.split('\n').slice(1,4).join('\n'));
       return secureResponse(json({ error: 'O sistema não pôde concluir a operação. Tente novamente em instantes.' },500),request);
     }
   },

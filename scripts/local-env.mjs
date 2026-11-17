@@ -66,7 +66,7 @@ export function createLocalEnv({ folder = '', origin = 'http://127.0.0.1:8787', 
     return photosPath && resolve(photosPath,id);
   };
   const env = {
-    APP_ORIGIN:origin, MAIL_DEV:mail, ADMIN_BOOTSTRAP_TOKEN:bootstrapToken,
+    APP_ORIGIN:origin, APP_CAMPUS_NAME:'Fatec Taquaritinga', MAIL_DEV:mail, ADMIN_BOOTSTRAP_TOKEN:bootstrapToken,
     AI:ai, IMAGE_SUGGESTIONS:ai ? 'true' : 'false',
     ASSETS:assets(publicDir),
     PASSWORDS:{ idFromName:name => name, get:() => cryptoWorker },
