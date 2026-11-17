@@ -1,7 +1,8 @@
 {
   "name": "Achados & Perdidos - Fatec",
   "short_name": "Achados",
-  "start_url": "./#home",
+  "id": "./",
+  "start_url": "./prototipo.html#home",
   "scope": "./",
   "display": "standalone",
   "theme_color": "#c91f1f",
