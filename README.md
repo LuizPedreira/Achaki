@@ -1,6 +1,6 @@
 # Sistema de Achados e Perdidos
 
-**[Abrir o sistema](https://achaki.jrsites.online/)**
+**[Abrir o sistema](https://achados.jrsites.online/)**
 
 Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
