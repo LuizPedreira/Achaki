@@ -88,3 +88,4 @@ O trabalho acadêmico original cita Supabase e Vercel. A implementação de prod
 
 - [Inter](https://github.com/rsms/inter), SIL Open Font License 1.1 em `public/fonts/inter.LICENSE.txt`.
 - [QR Creator](https://github.com/nimiq/qr-creator), MIT em `public/vendor/qr-creator.LICENSE.txt`.
+- [Noble Hashes 2.4.0](https://github.com/paulmillr/noble-hashes/tree/2.4.0), MIT em `src/vendor/noble-hashes.LICENSE.txt`. O Worker usa o PBKDF2-SHA256 dessa biblioteca dentro do Durable Object para manter as 600 mil iterações.

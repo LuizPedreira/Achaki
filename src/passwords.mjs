@@ -1,5 +1,5 @@
-import { pbkdf2 } from 'node:crypto';
 import { base64url, fromBase64url } from './http.mjs';
+import { pbkdf2Sha256 } from './vendor/noble-pbkdf2-sha256.mjs';
 
 export class PasswordDerivations {
   async fetch(request) {
@@ -9,12 +9,8 @@ export class PasswordDerivations {
         !Number.isInteger(iterations) || iterations < 100_000 || iterations > 2_000_000) {
       return new Response(null, { status: 400 });
     }
-    const key = await new Promise((resolve, reject) => {
-      pbkdf2(password, fromBase64url(salt), iterations, 32, 'sha256', (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      });
-    });
+    // Keep the existing work factor and hash format with Workers' native PBKDF2 limit.
+    const key = pbkdf2Sha256(password, fromBase64url(salt), iterations);
     return new Response(base64url(key));
   }
 }
