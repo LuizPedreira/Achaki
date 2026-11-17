@@ -10,7 +10,7 @@ const source = JSON.parse(await readFile(new URL('../wrangler.jsonc',import.meta
 const destination = 'wrangler.production.json';
 const flags = new Set(process.argv.slice(2));
 for (const flag of flags) {
-  if (!['--suggestions','--dry-run'].includes(flag)) throw new Error(`Opção desconhecida: ${flag}`);
+  if (!['--suggestions','--dry-run','--workers-build'].includes(flag)) throw new Error(`Opção desconhecida: ${flag}`);
 }
 const npxCli = join(dirname(process.execPath),'node_modules','npm','bin','npx-cli.js');
 const bundled = existsSync(npxCli);
@@ -20,6 +20,8 @@ const prefix = [...(bundled ? [npxCli] : []),'--yes','wrangler@4.162.0'];
 const production = ['--config',destination];
 const db = source.d1_databases[0];
 const photo = source.r2_buckets[0];
+const workersBuild = flags.has('--workers-build');
+const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 function wrangler(args, { capture = false } = {}) {
   const result = spawnSync(command,[...prefix,...args],{
@@ -71,14 +73,13 @@ async function verifyPublication(origin, release) {
   console.log(`Nova versão, banco e autenticação verificados em ${origin}`);
 }
 
-async function deploy() {
+function provisionResources(check) {
   let database = databaseList().find(entry => entry.name === db.database_name);
-  const check = flags.has('--dry-run');
   if (!database && !check) {
     wrangler(['d1','create',db.database_name]);
     database = databaseList().find(entry => entry.name === db.database_name);
   }
-  if (!database || !/^[0-9a-f-]{36}$/i.test(database.uuid || '')) {
+  if (!database || !uuid.test(database.uuid || '')) {
     throw new Error('O banco D1 ainda não existe. Execute o comando sem --dry-run para criá-lo.');
   }
   db.database_id = database.uuid;
@@ -93,6 +94,19 @@ async function deploy() {
     if (check) throw new Error('O bucket de fotos ainda não existe. Execute o comando sem --dry-run para criá-lo.');
     wrangler(['r2','bucket','create',photo.bucket_name]);
   }
+}
+
+async function deploy() {
+  const check = flags.has('--dry-run');
+  if (workersBuild) {
+    const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID;
+    if (!uuid.test(databaseId || '') || databaseId === db.database_id) {
+      throw new Error('Defina CLOUDFLARE_D1_DATABASE_ID com o identificador do D1 existente.');
+    }
+    db.database_id = databaseId;
+  } else {
+    provisionResources(check);
+  }
   if (flags.has('--suggestions')) {
     source.ai = { binding:'AI' };
     source.vars.IMAGE_SUGGESTIONS = 'true';
@@ -101,11 +115,12 @@ async function deploy() {
     if (!/^[0-9a-f]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID)) throw new Error('CLOUDFLARE_ACCOUNT_ID inválido.');
     source.account_id = process.env.CLOUDFLARE_ACCOUNT_ID;
   }
-  source.vars.APP_RELEASE = randomUUID();
+  const commit = process.env.WORKERS_CI_COMMIT_SHA || '';
+  source.vars.APP_RELEASE = workersBuild && /^[0-9a-f]{40}$/i.test(commit) ? commit : randomUUID();
   await writeFile(join(root,destination),JSON.stringify(source,null,2) + '\n');
   wrangler(['deploy','--dry-run',...production]);
   if (check) return;
-  wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
+  if (!workersBuild) wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
   wrangler(['deploy',...production]);
   await verifyPublication(source.vars.APP_ORIGIN,source.vars.APP_RELEASE);
 }

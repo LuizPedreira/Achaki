@@ -48,6 +48,10 @@ O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as f
 
 4. Entre em **Painel → Configurações** para informar local, horários e WhatsApp institucionais e decidir se os encontrados precisam de revisão antes de aparecer na busca. Altere `APP_CAMPUS_NAME` em `wrangler.jsonc` para usar o nome de outro campus ou deixe o valor vazio para ocultar o subtítulo.
 
+### Cloudflare Workers Builds
+
+Ao conectar o GitHub ao Worker existente, configure `npm test` como comando de build e `npm run deploy -- --workers-build` como comando de publicação. Defina `NODE_VERSION` com Node.js 24 e `CLOUDFLARE_D1_DATABASE_ID` com o identificador do D1 já provisionado. Aplique as migrações no D1 antes de publicar uma versão que altera o esquema. O comando de publicação do Workers Builds usa os vínculos existentes e informa o SHA do commit no endpoint `/api/health`.
+
 ### Integrações
 
 | Recurso | Configuração |
