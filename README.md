@@ -4,6 +4,8 @@
 
 Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
+Em **Meus registros**, quem publicou um objeto em aberto pode corrigir os dados, arquivar ou restaurar registros próprios. Essa edição fica disponível para perdas e encontrados que ainda estão com a pessoa que os registrou, enquanto não houver uma solicitação ativa ou reserva vinculada.
+
 ## Rodar no computador
 
 Com Node.js 24 ou superior, na raiz do repositório:
@@ -36,7 +38,7 @@ O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as f
    npm run deploy
    ```
 
-2. O script cria ou reutiliza o D1 `achaki` e o bucket `achaki-photos`. Aplica as migrações e configura `achados.jrsites.online` como endereço principal. O endereço anterior redireciona para ele. O resultado esperado é [achados.jrsites.online/api/health](https://achados.jrsites.online/api/health) com `{"ok":true}`. Para validar uma configuração já provisionada sem implantar, use `npm run deploy -- --dry-run`.
+2. O script cria ou reutiliza o D1 `achaki` e o bucket `achaki-photos`. Aplica as migrações e configura `achados.jrsites.online` como endereço principal. O endereço anterior redireciona para ele. Depois da publicação, valida o domínio, a versão recém-publicada, a conexão com o banco e a resposta a uma tentativa de login com credenciais fictícias. Para validar uma configuração já provisionada sem implantar, use `npm run deploy -- --dry-run`.
 3. Cadastre sua conta no site e mantenha a sessão aberta. Gere uma chave aleatória por meio de um gerenciador de senhas e configure o bootstrap usando o comando abaixo. Entre com ela em `/configurar-admin` e, depois de abrir o painel, remova o segredo.
 
    ```sh

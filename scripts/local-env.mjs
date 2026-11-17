@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFileSync, openAsBlob } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, openAsBlob } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,8 @@ import { prepareItem,itemValues } from '../src/items.mjs';
 
 const root = fileURLToPath(new URL('../',import.meta.url));
 const publicDir = resolve(root,'public');
-const migration = readFileSync(new URL('../migrations/0001_achaki.sql',import.meta.url),'utf8');
+const migrationDir = new URL('../migrations/',import.meta.url);
+const migrations = readdirSync(migrationDir).filter(name => name.endsWith('.sql')).sort();
 const mimeTypes = {
   '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8',
   '.js':'text/javascript; charset=utf-8', '.json':'application/json',
@@ -53,11 +54,32 @@ function assets(publicPath) {
   };
 }
 
+function migrate(sqlite) {
+  sqlite.exec('BEGIN IMMEDIATE');
+  try {
+    sqlite.exec('CREATE TABLE IF NOT EXISTS local_migrations (name TEXT PRIMARY KEY)');
+    const hasMigration = sqlite.prepare('SELECT name FROM local_migrations WHERE name = ?');
+    const applied = sqlite.prepare('INSERT OR IGNORE INTO local_migrations (name) VALUES (?)');
+    if (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get()) {
+      applied.run('0001_achaki.sql');
+    }
+    for (const name of migrations) {
+      if (hasMigration.get(name)) continue;
+      sqlite.exec(readFileSync(new URL(name,migrationDir),'utf8'));
+      applied.run(name);
+    }
+    sqlite.exec('COMMIT');
+  } catch (error) {
+    sqlite.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export function createLocalEnv({ folder = '', origin = 'http://127.0.0.1:8787', mail, bootstrapToken, ai } = {}) {
   const dbPath = folder ? resolve(folder,'achaki.sqlite') : ':memory:';
   if (folder) mkdirSync(dirname(dbPath),{ recursive:true });
   const sqlite = new DatabaseSync(dbPath,{ enableForeignKeyConstraints:true });
-  if (!sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'").get()) sqlite.exec(`BEGIN;\n${migration}\nCOMMIT;`);
+  migrate(sqlite);
   const memory = new Map();
   const photosPath = folder && resolve(folder,'photos');
   const cryptoWorker = new PasswordDerivations();

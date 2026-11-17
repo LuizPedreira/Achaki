@@ -18,6 +18,8 @@ const routes = [
   ['POST', /^\/items\/([^/]+)\/return$/, ({ env,user,body }, id) => requests.returnItem(env,user,id,body)],
   ['POST', /^\/items\/([^/]+)\/rating$/, ({ env,user,body }, id) => requests.rating(env,user,id,body)],
   ['GET', /^\/mine$/, async ({ env,user,url }) => json(await items.listItems(env,url.searchParams,{ mode: 'mine',user }))],
+  ['PATCH', /^\/mine\/([^/]+)$/, ({ env,user,body }, id) => items.editItem(env,user,id,body,{ own: true })],
+  ['POST', /^\/mine\/([^/]+)\/archive$/, ({ env,user,body }, id) => items.archiveOwnItem(env,user,id,body)],
   ['GET', /^\/ratings$/, ({ env,user }) => requests.myRatings(env,user)],
   ['GET', /^\/returns$/, ({ env,user }) => requests.myReturns(env,user)],
   ['GET', /^\/contacts$/, ({ env,user,url }) => requests.inbox(env,user,url.searchParams)],
@@ -76,7 +78,7 @@ async function handle(request, env, context) {
   }
   if (path === '/api/health' && request.method === 'GET') {
     const record = await first(env, 'SELECT id FROM settings WHERE id = 1');
-    return json({ ok: Boolean(record) }, record ? 200 : 503);
+    return json({ ok: Boolean(record), release: env.APP_RELEASE || undefined }, record ? 200 : 503);
   }
   const routePath = path.slice(4);
   const match = routes.find(([method, pattern]) => request.method === method && pattern.test(routePath));

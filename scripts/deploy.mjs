@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile,writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { dirname,join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,6 +43,34 @@ function databaseList() {
   return entries;
 }
 
+async function verifyPublication(origin, release) {
+  const health = new URL('/api/health',origin);
+  let ready = false;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const response = await fetch(health,{ redirect:'error',signal:AbortSignal.timeout(5000) });
+      if (response.ok) {
+        const data = await response.json();
+        ready = data.ok === true && data.release === release;
+        if (ready) break;
+      }
+    } catch {}
+    if (attempt < 9) await new Promise(resolve => setTimeout(resolve,5000));
+  }
+  if (!ready) throw new Error(`O Wrangler concluiu a publicação. O domínio ${origin} ainda não retornou a nova versão com o banco disponível.`);
+
+  const response = await fetch(new URL('/api/auth/login',origin),{
+    method:'POST', redirect:'error', signal:AbortSignal.timeout(20000),
+    headers:{ 'Content-Type':'application/json', Origin:origin },
+    body:JSON.stringify({ email:`verificacao-${randomUUID()}@example.invalid`, password:randomUUID() })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (response.status !== 401 || data.error !== 'E-mail ou senha incorretos.' || response.headers.has('Set-Cookie')) {
+    throw new Error(`A nova versão respondeu em ${origin}, mas o teste de autenticação falhou com HTTP ${response.status}.`);
+  }
+  console.log(`Nova versão, banco e autenticação verificados em ${origin}`);
+}
+
 async function deploy() {
   let database = databaseList().find(entry => entry.name === db.database_name);
   const check = flags.has('--dry-run');
@@ -72,23 +101,13 @@ async function deploy() {
     if (!/^[0-9a-f]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID)) throw new Error('CLOUDFLARE_ACCOUNT_ID inválido.');
     source.account_id = process.env.CLOUDFLARE_ACCOUNT_ID;
   }
+  source.vars.APP_RELEASE = randomUUID();
   await writeFile(join(root,destination),JSON.stringify(source,null,2) + '\n');
   wrangler(['deploy','--dry-run',...production]);
   if (check) return;
   wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
   wrangler(['deploy',...production]);
-  const health = new URL('/api/health',source.vars.APP_ORIGIN);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const response = await fetch(health,{ signal:AbortSignal.timeout(4000) });
-      if (response.ok && (await response.json()).ok === true) {
-        console.log(`Banco e domínio verificados em ${source.vars.APP_ORIGIN}`);
-        return;
-      }
-    } catch {}
-    if (attempt < 4) await new Promise(resolve => setTimeout(resolve,5000));
-  }
-  throw new Error(`O Wrangler concluiu a publicação, mas o endpoint ${health.href} ainda não respondeu com o banco disponível.`);
+  await verifyPublication(source.vars.APP_ORIGIN,source.vars.APP_RELEASE);
 }
 
 try { await deploy(); }

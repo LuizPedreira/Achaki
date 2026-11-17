@@ -1,10 +1,20 @@
 import { HttpError, all, choice, date, db, digest, first, id, json, normalize, now,
   pageOf, plain, requireUser, run, stamp, throttle } from './http.mjs';
 
+const activeContactCount = `CASE WHEN i.kind = 'found' THEN
+  (SELECT count(*) FROM contacts c WHERE c.item_id = i.id AND c.status IN ('pending','approved'))
+  ELSE (SELECT count(*) FROM contacts c WHERE c.lost_id = i.id AND c.status IN ('pending','approved')) END`;
+const linkedReservation = `i.kind = 'lost' AND EXISTS (SELECT 1 FROM items f
+  WHERE f.reserved_lost_id = i.id AND f.status = 'reserved' AND f.archived_at IS NULL)`;
+const authorCanChange = `i.status = 'open' AND (i.kind = 'lost' OR i.custody = 'finder')
+  AND (${activeContactCount}) = 0 AND NOT (${linkedReservation})`;
+const authorPublication = `CASE WHEN i.kind = 'found' AND i.publication = 'public' AND ? = 'user'
+  AND (SELECT review_required FROM settings WHERE id = 1) = 1 THEN 'pending' ELSE i.publication END`;
+
 export const itemQuery = `SELECT i.*, c.name AS category, u.name AS author_name, u.phone AS author_phone,
   r.returned_on, r.id AS return_id, r.recipient_id, r.recipient_name, r.notes AS return_notes, r.lost_id,
   (SELECT group_concat(m.id) FROM (SELECT id FROM media WHERE item_id = i.id AND discard = 0 ORDER BY position) m) AS photos,
-  (SELECT count(*) FROM contacts x WHERE x.item_id = i.id AND x.status IN ('pending','approved')) AS contact_count,
+  (${activeContactCount}) AS contact_count, (${linkedReservation}) AS linked_reservation,
   (SELECT score FROM ratings WHERE item_id = i.id AND perspective = 'finder') AS finder_rating,
   (SELECT score FROM ratings WHERE item_id = i.id AND perspective = 'recipient') AS recipient_rating,
   (SELECT item_id FROM returns WHERE lost_id = i.id) AS recovered_item_id
@@ -30,6 +40,12 @@ export function itemView(row, detailed = false) {
     updatedAt: row.updated_at, recoveredItemId: row.recovered_item_id
   };
 }
+
+function canChangeOwnItem(item) {
+  return item.status === 'open' && item.custody !== 'campus' && !item.contact_count && !item.linked_reservation;
+}
+
+const nextUpdate = item => new Date(Math.max(Date.now(), Date.parse(item.updated_at) + 1)).toISOString();
 
 export async function metadata(env) {
   const [categories, locations, settings] = await env.DB.batch([
@@ -89,8 +105,10 @@ export async function listItems(env, search, { mode = 'public', user = null } = 
   const { terms, params } = filterClauses(search);
   if (mode === 'public') terms.push("i.kind = 'found'", "i.publication = 'public'", 'i.archived_at IS NULL');
   if (mode === 'mine') {
-    terms.push('i.author_id = ?', 'i.archived_at IS NULL');
+    terms.push('i.author_id = ?');
     params.push(requireUser(user).id);
+    if (search.get('archived') === '1') terms.push('i.archived_at IS NOT NULL', 'i.updated_by = i.author_id');
+    else terms.push('i.archived_at IS NULL');
   }
   if (mode !== 'public') {
     const kind = search.get('kind');
@@ -110,7 +128,14 @@ export async function listItems(env, search, { mode = 'public', user = null } = 
     db(env, `${itemQuery}${where} ORDER BY ${order}, i.id LIMIT ? OFFSET ?`, ...params, limit, offset),
     db(env, `SELECT count(*) AS total FROM items i${where}`, ...params)
   ]);
-  return { items: records.results.map(item => itemView(item, mode !== 'public')), total: count.results[0].total, page, perPage: limit };
+  return {
+    items: records.results.map(row => {
+      const item = itemView(row, mode !== 'public');
+      if (mode === 'mine') item.canChange = canChangeOwnItem(row);
+      return item;
+    }),
+    total: count.results[0].total, page, perPage: limit
+  };
 }
 
 export async function itemDetails(env, user, itemId) {
@@ -203,23 +228,65 @@ export async function listMatches(env, user, lostId) {
   return json({ items: items.map(item => itemView(item)) });
 }
 
-export async function editItem(env, user, itemId, input) {
+async function ownItemForChange(env, user, itemId, updatedAt, archived = false) {
+  requireUser(user);
   const item = await loadItem(env, itemId);
+  if (!item || item.author_id !== user.id || Boolean(item.archived_at) !== archived || (archived && item.updated_by !== user.id)) {
+    throw new HttpError(404, 'Registro não encontrado.');
+  }
+  if (updatedAt !== item.updated_at) throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
+  if (!canChangeOwnItem(item)) throw new HttpError(409, 'O registro está sob guarda do setor, encerrado ou vinculado a um pedido ativo.');
+  return item;
+}
+
+export async function editItem(env, user, itemId, input, { own = false } = {}) {
+  const item = own ? await ownItemForChange(env, user, itemId, input.updatedAt) : await loadItem(env, itemId);
   if (!item || item.archived_at) throw new HttpError(404, 'Item não encontrado.');
+  if (!own && input.updatedAt !== undefined && input.updatedAt !== item.updated_at) {
+    throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
+  }
   const fields = await prepareItem(env, { ...input, custody: item.custody }, item.kind, item);
   if (item.status === 'returned' && fields.occurred > item.returned_on) throw new HttpError(400, 'A data do encontro precisa ser anterior à devolução.');
-  if ((item.reserved_lost_id || item.recovery_for_id || item.contact_count || item.return_id || item.status === 'recovered') &&
+  if ((item.reserved_lost_id || item.recovery_for_id || item.contact_count || item.linked_reservation || item.return_id || item.status === 'recovered') &&
       fields.category.id !== item.category_id) throw new HttpError(409, 'A categoria está vinculada a uma solicitação ou devolução.');
+  if (fields.title === item.title && fields.description === item.description && fields.category.id === item.category_id &&
+      fields.location === item.location && fields.occurred === item.occurred_on && fields.sharePhone === item.share_phone) {
+    return json({ publication: item.publication });
+  }
+  if (item.recovery_for_id) fields.fingerprint = item.fingerprint;
   try {
-    const changed = await run(env, `UPDATE items SET title = ?, description = ?, category_id = ?, location = ?,
-      occurred_on = ?, custody = ?, share_phone = ?, search_text = ?, fingerprint = ?, updated_by = ?, updated_at = ?
-      WHERE id = ? AND archived_at IS NULL AND updated_at = ? AND (category_id = ? OR NOT EXISTS (
-        SELECT 1 FROM contacts c WHERE (c.item_id = items.id OR c.lost_id = items.id) AND c.status IN ('pending','approved','delivered')
-      ))`, ...itemValues(fields), user.id, stamp(), item.id, item.updated_at, fields.category.id);
-    if (!changed.meta.changes) throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
+    const changed = await first(env, `UPDATE items AS i SET title = ?, description = ?, category_id = ?, location = ?,
+      occurred_on = ?, custody = ?, share_phone = ?, search_text = ?, fingerprint = ?, updated_by = ?, updated_at = ?,
+      publication = ${own ? authorPublication : 'i.publication'}
+      WHERE i.id = ? AND i.archived_at IS NULL AND i.updated_at = ? AND (i.category_id = ? OR (NOT (${linkedReservation}) AND NOT EXISTS (
+        SELECT 1 FROM contacts c WHERE (c.item_id = i.id OR c.lost_id = i.id) AND c.status IN ('pending','approved','delivered')
+      ))) ${own ? `AND i.author_id = ? AND ${authorCanChange}` : ''} RETURNING publication`,
+      ...itemValues(fields), user.id, nextUpdate(item), ...(own ? [user.role] : []),
+      item.id, item.updated_at, fields.category.id, ...(own ? [user.id] : []));
+    if (!changed) throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
+    return json(changed);
   } catch (error) {
     if (/unique/i.test(error.message)) throw new HttpError(409, 'Já existe um registro idêntico.');
     throw error;
   }
-  return json({});
+}
+
+export async function archiveOwnItem(env, user, itemId, input) {
+  requireUser(user);
+  const action = choice(input.action, ['archive', 'restore'], 'uma ação válida');
+  const restoring = action === 'restore';
+  const item = await ownItemForChange(env, user, itemId, input.updatedAt, restoring);
+  const time = nextUpdate(item);
+  try {
+    const changed = await first(env, `UPDATE items AS i SET archived_at = ?, updated_by = ?, updated_at = ?,
+      publication = ${restoring ? authorPublication : 'i.publication'}
+      WHERE i.id = ? AND i.author_id = ? AND i.updated_at = ? AND ${authorCanChange}
+      AND ${restoring ? 'i.archived_at IS NOT NULL AND i.updated_by = i.author_id' : 'i.archived_at IS NULL'} RETURNING publication`,
+      restoring ? null : time, user.id, time, ...(restoring ? [user.role] : []), item.id, user.id, item.updated_at);
+    if (!changed) throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
+    return json(changed);
+  } catch (error) {
+    if (/unique/i.test(error.message)) throw new HttpError(409, 'Já existe um registro ativo com essas informações.');
+    throw error;
+  }
 }

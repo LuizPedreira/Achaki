@@ -49,12 +49,18 @@ export async function requestContact(env, user, itemId, input) {
 export async function inbox(env, user, search) {
   requireUser(user);
   const staff = search.get('scope') === 'campus' && user.role === 'admin';
-  const filter = staff ? "i.custody = 'campus'" : "(c.requester_id = ? OR (i.custody = 'finder' AND i.author_id = ?))";
+  const filters = [staff ? "i.custody = 'campus'" : "(c.requester_id = ? OR (i.custody = 'finder' AND i.author_id = ?))"];
   const args = staff ? [] : [user.id,user.id];
+  for (const [key, column] of [['item','item_id'],['lost','lost_id']]) {
+    if (!search.has(key)) continue;
+    filters.push(`c.${column} = ?`);
+    args.push(id(search.get(key)));
+  }
+  const filter = filters.join(' AND ');
   const { page,offset,limit } = pageOf(search);
   const [records,count] = await env.DB.batch([
     db(env, `SELECT c.*, i.title, i.custody, i.author_id, i.reserved_contact_id, i.reserved_lost_id, i.status AS item_status,
-    i.archived_at, requester.name AS requester_name, requester.phone AS requester_phone,
+    i.archived_at, i.publication, requester.name AS requester_name, requester.phone AS requester_phone,
     author.phone AS author_phone, s.sector_phone, s.sector_location, s.sector_hours
     FROM contacts c JOIN items i ON i.id = c.item_id JOIN users requester ON requester.id = c.requester_id
     JOIN users author ON author.id = i.author_id CROSS JOIN settings s WHERE s.id = 1 AND ${filter}
@@ -68,6 +74,8 @@ export async function inbox(env, user, search) {
     const available = (!row.reserved_contact_id || row.reserved_contact_id === row.id) && (!row.reserved_lost_id || row.reserved_lost_id === row.lost_id);
     return {
       id: row.id, itemId: row.item_id, title: row.title, status: row.status, side, custody: row.custody,
+      canViewItem: user.role === 'admin' || row.status === 'delivered' ||
+        (!row.archived_at && (row.publication === 'public' || row.author_id === user.id)),
       requesterName: side === 'received' ? row.requester_name : null,
       message: row.message, createdAt: row.created_at, canReview: side === 'received' && live && row.status === 'pending',
       canDeliver: side === 'received' && live && available && ['pending','approved'].includes(row.status),

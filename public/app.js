@@ -302,14 +302,15 @@ async function detail(itemId, token) {
   const status = item.request?.status;
   let action = '';
   if (item.kind === 'found' && active && !own) {
-    if (status === 'pending' || status === 'approved') action = link('/meus-registros?aba=contatos','Acompanhar solicitação',{ cls:'button primary',symbol:'bell' });
+    if (status === 'pending' || status === 'approved') action = link(contactPath(item),'Acompanhar solicitação',{ cls:'button primary',symbol:'bell' });
     else if (session.user) action = btn('claim','Acho que este item é meu','target','primary');
     else action = link(nextQS(itemHref(item.id)),'Entrar para solicitar contato',{ cls:'button primary',symbol:'lock' });
   }
-  if (own || item.canRate) action += link('/meus-registros','Ver meus registros',{ cls:'button secondary',symbol:'list' });
+  const recordsPath = item.kind === 'lost' ? '/meus-registros?aba=perdi' : '/meus-registros';
+  if (own || item.canRate) action += link(recordsPath,'Ver meus registros',{ cls:'button secondary',symbol:'list' });
   if (item.canRate && !item.rating) action += btn('rate-current','Avaliar devolução','star','secondary');
   if (item.canManage && active) action += btn('qr-current','Gerar etiqueta QR','qr','secondary');
-  site.innerHTML = shell(`<div class="back-row">${link(item.kind === 'lost' ? '/meus-registros' : '/',item.kind === 'lost' ? 'Meus registros' : 'Voltar aos itens',{ cls:'text-link',symbol:'back' })}</div>
+  site.innerHTML = shell(`<div class="back-row">${link(item.kind === 'lost' ? recordsPath : '/',item.kind === 'lost' ? 'Meus registros' : 'Voltar aos itens',{ cls:'text-link',symbol:'back' })}</div>
     <div class="detail-grid"><div class="gallery panel"><div class="gallery-main ${item.photos[0] ? '' : 'no-picture'}">
     ${item.photos[0] ? `<button type="button" data-action="gallery" data-index="0" aria-label="Ampliar foto do objeto"><img src="${e(item.photos[0])}" alt="${e(item.title)}"></button>` : cover(item)}</div>
     ${item.photos.length > 1 ? `<div class="thumbnails">${photoList}</div>` : ''}</div>
@@ -319,7 +320,7 @@ async function detail(itemId, token) {
       <div><dt>${icon('calendar')} ${item.kind === 'found' ? 'Encontrado em' : 'Perdido por volta de'}</dt><dd>${niceDate(item.occurredOn)}</dd></div>
       ${item.custody ? `<div><dt>${icon('box')} Guarda</dt><dd>${e(custodyText[item.custody])}</dd></div>` : ''}
       ${item.returnedOn ? `<div><dt>${icon('check')} Devolução</dt><dd>${niceDate(item.returnedOn)}</dd></div>` : ''}</dl>
-    <div class="detail-actions">${action}${btn('share','Compartilhar','share','secondary')}</div>
+    <div class="detail-actions">${action}${item.kind === 'found' && item.publication === 'public' ? btn('share','Compartilhar','share','secondary') : ''}</div>
     ${item.kind === 'found' && active && !own && !status ? '<p class="hint">Informe uma característica que só a pessoa dona do objeto saberia. O responsável revisará seu pedido.</p>' : ''}</section></div>`);
   actions.gallery = button => showGallery(item,Number(button.dataset.index));
   actions.claim = () => claim(item);
@@ -361,7 +362,7 @@ function claim(item, lostId) {
   onForm('#claim-form', async data => {
     await api(`/items/${item.id}/contact`,{ method:'POST',body:{ ...data,lostId } });
     notify('Solicitação enviada.');
-    go('/meus-registros?aba=contatos');
+    go(contactPath(item));
   });
 }
 
@@ -393,11 +394,11 @@ function newChoice() {
     <a class="choice-card panel" href="/novo/lost" data-nav><span class="choice-icon">${icon('target')}</span><div><h2>Perdi um item</h2><p>Registre a perda e acompanhe os objetos que podem corresponder.</p></div>${icon('arrow')}</a></div>`);
 }
 
-function itemFields(kind, data = {}, categories = session.categories) {
+function itemFields(kind, data = {}, categories = session.categories, lockCategory = false) {
   const found = kind === 'found';
   return `${input('Nome do objeto','title',data.title,'required minlength="3" maxlength="90" placeholder="Ex.: Estojo azul"')}
     ${textarea('Descrição','description',data.description,'required minlength="8" maxlength="1200" rows="4" placeholder="Descreva as características visíveis do objeto."')}
-    <div class="form-grid">${select('Categoria','categoryId',[['','Selecione'],...categories.map(c => [c.id,c.name])],data.categoryId,'required')}
+    <div class="form-grid">${select('Categoria','categoryId',[['','Selecione'],...categories.map(c => [c.id,c.name])],data.categoryId,lockCategory ? 'disabled' : 'required')}
     ${input(found ? 'Data em que encontrou' : 'Data aproximada da perda','occurredOn',data.occurredOn || today(),`type="date" max="${today()}" required`)}</div>
     ${input(found ? 'Local onde encontrou' : 'Local da perda (opcional)','location',data.location,`list="item-locations" maxlength="120" ${found ? 'required minlength="2"' : ''} placeholder="Ex.: Biblioteca"`)}
     <datalist id="item-locations">${locationOptions()}</datalist>`;
@@ -573,44 +574,83 @@ function tabs(items, active) {
     link(url,text,{ cls:`tab ${key === active ? 'on' : ''}`,attrs:key === active ? 'aria-current="page"' : '' })).join('')}</nav>`;
 }
 
+const contactsPage = '/meus-registros?aba=contatos';
+
+function contactPath(item) {
+  return withQuery(contactsPage,item.kind === 'lost' ? 'lost' : 'item',item.id);
+}
+
+function editRecord(item, own = false) {
+  const categories = session.categories.some(cat => cat.id === item.categoryId)
+    ? session.categories : [...session.categories,{ id:item.categoryId,name:item.category }];
+  const changePhoneConsent = own && item.kind === 'lost';
+  modal('Editar registro',`<form class="stack" id="edit-record-form">
+    ${itemFields(item.kind,item,categories,Boolean(item.recoveryForId))}
+    ${changePhoneConsent ? `<label class="check"><input type="checkbox" name="sharePhone" ${checked(item.sharePhone)}>Compartilhar meu WhatsApp com o setor para tratar desta perda</label>` : ''}
+    <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Salvar alterações','check')}</div></form>`);
+  onForm('#edit-record-form',async data => {
+    const { publication } = await api(`/${own ? 'mine' : 'admin/items'}/${item.id}`,{ method:'PATCH',body:{
+      ...data, categoryId:data.categoryId || item.categoryId, updatedAt:item.updatedAt,
+      sharePhone:changePhoneConsent ? data.sharePhone === 'on' : item.sharePhone
+    } });
+    notify(own && publication === 'pending' ? 'Alterações salvas. O objeto está em revisão.' : 'Registro atualizado.');
+    go(location.pathname + location.search,{ keepScroll:true });
+  });
+}
+
 function recordCard(item) {
-  const active = ['open','reserved'].includes(item.status);
+  const archived = Boolean(item.archivedAt);
+  const active = !archived && ['open','reserved'].includes(item.status);
   const found = item.kind === 'found';
   const mine = session.user.id === item.authorId;
+  const key = `data-id="${item.id}"`;
   const controls = [];
   if (found && active && item.custody === 'finder' && mine) {
-    controls.push(btn('transfer','Entreguei no setor','building','secondary',`data-id="${item.id}"`));
-    controls.push(btn('return-record','Registrar devolução','check','primary',`data-id="${item.id}"`));
+    controls.push(btn('transfer','Entreguei no setor','building','secondary',key));
+    controls.push(btn('return-record','Registrar devolução','check','primary',key));
   }
-  if (!found && active) controls.push(btn('matches','Ver itens compatíveis','search','secondary',`data-id="${item.id}"`));
-  if (!found && item.recoveredItemId) controls.push(link(itemHref(item.recoveredItemId),'Ver devolução',{ symbol:'check' }));
-  if (found && active && item.custody === 'finder' && mine) controls.push(btn('qr-record','Etiqueta QR','qr','secondary',`data-id="${item.id}"`));
-  if (item.contactCount && item.custody === 'finder' && active) controls.push(link('/meus-registros?aba=contatos',`${item.contactCount} solicitaç${item.contactCount === 1 ? 'ão' : 'ões'}`,{ cls:'button secondary',symbol:'bell' }));
-  if (found && item.status === 'returned' && !item.finderRating && item.recipientId !== session.user.id) {
-    controls.push(btn('rate-record','Avaliar devolução','star','primary',`data-id="${item.id}"`));
+  if (!found && active) controls.push(btn('matches','Ver itens compatíveis','search','secondary',key));
+  if (!archived && !found && item.recoveredItemId) controls.push(link(itemHref(item.recoveredItemId),'Ver devolução',{ symbol:'check' }));
+  if (found && active && item.custody === 'finder' && mine) controls.push(btn('qr-record','Etiqueta QR','qr','secondary',key));
+  if (item.contactCount && (!found || item.custody === 'finder') && active) controls.push(link(contactPath(item),`${item.contactCount} solicitaç${item.contactCount === 1 ? 'ão' : 'ões'}`,{ cls:'button secondary',symbol:'bell' }));
+  if (!archived && found && item.status === 'returned' && !item.finderRating && item.recipientId !== session.user.id) {
+    controls.push(btn('rate-record','Avaliar devolução','star','primary',key));
   }
-  return `<article class="record panel"><a href="${itemHref(item.id)}" data-nav class="record-photo" aria-label="Ver ${e(item.title)}">${cover(item)}</a>
-    <div class="record-body"><div class="record-tags">${badge(item.status)}${found && item.publication !== 'public' ? badge(item.publication,publicationText[item.publication]) : ''}
-      <span class="item-category">${e(item.category)}</span></div><h3>${link(itemHref(item.id),e(item.title),{ cls:'record-title' })}</h3>
-      <div class="inline-meta">${rowInfo('calendar',niceDate(item.occurredOn))}${item.custody ? rowInfo('box',custodyText[item.custody]) : ''}</div>
+  if (item.canChange && archived) controls.push(btn('restore-own','Restaurar','history','secondary',key));
+  if (item.canChange && !archived) {
+    controls.push(btn('edit-own','Editar','edit','secondary',key));
+    controls.push(btn('archive-own','Arquivar','archive','quiet',key));
+  }
+  const photo = archived ? `<div class="record-photo">${cover(item)}</div>` :
+    `<a href="${itemHref(item.id)}" data-nav class="record-photo" aria-label="Ver ${e(item.title)}">${cover(item)}</a>`;
+  return `<article class="record panel">${photo}
+    <div class="record-body"><div class="record-tags">${archived ? badge('archived','Arquivado') : badge(item.status)}
+      ${!archived && found && item.publication !== 'public' ? badge(item.publication) : ''}
+      <span class="item-category">${e(item.category)}</span></div>
+      <h3>${archived ? e(item.title) : link(itemHref(item.id),e(item.title),{ cls:'record-title' })}</h3>
+      <div class="inline-meta">${rowInfo('calendar',niceDate(archived ? item.archivedAt : item.occurredOn))}${item.custody ? rowInfo('box',custodyText[item.custody]) : ''}</div>
       ${controls.length ? `<div class="record-actions">${controls.join('')}</div>` : ''}</div></article>`;
 }
 
 const recordTabs = [
   ['/meus-registros','Encontrei','found'], ['/meus-registros?aba=perdi','Perdi','lost'],
-  ['/meus-registros?aba=contatos','Solicitações','contacts'], ['/meus-registros?aba=avaliacoes','Avaliações','ratings']
+  [contactsPage,'Solicitações','contacts'], ['/meus-registros?aba=avaliacoes','Avaliações','ratings']
 ];
 
 async function records(url, token) {
-  if (!needUser('/meus-registros')) return;
+  const path = url.pathname + url.search;
+  if (!needUser(path)) return;
   const tab = { perdi:'lost',contatos:'contacts',avaliacoes:'ratings' }[url.searchParams.get('aba')] || 'found';
   let content;
   let rows = [];
   if (tab === 'contacts') {
     const query = new URLSearchParams({ page:url.searchParams.get('page') || '1' });
+    for (const key of ['item','lost']) if (url.searchParams.has(key)) query.set(key,url.searchParams.get(key));
     const data = await api(`/contacts?${query}`);
     rows = data.contacts;
-    content = contactCards(rows) + pager(url.pathname + url.search,data);
+    const filtered = query.has('item') || query.has('lost');
+    const back = filtered ? `<div class="back-row">${link(contactsPage,'Ver todas as solicitações',{ cls:'text-link',symbol:'back' })}</div>` : '';
+    content = back + contactCards(rows) + pager(path,data);
   } else if (tab === 'ratings') {
     const [data, deliveries] = await Promise.all([api('/ratings'),api('/returns')]);
     const pending = deliveries.items.filter(item => !item.rating);
@@ -621,18 +661,39 @@ async function records(url, token) {
         <strong class="rating-number">${icon('star')} ${item.score}/5</strong></article>`).join('')}</div>`
       : empty('Nenhuma avaliação','Depois de uma devolução, você pode avaliar como foi a entrega.','','star');
   } else {
-    const data = await api(`/mine?kind=${tab}&page=${encodeURIComponent(url.searchParams.get('page') || '1')}`);
+    const archived = url.searchParams.get('arquivados') === '1';
+    const query = new URLSearchParams({ kind:tab, page:url.searchParams.get('page') || '1' });
+    if (archived) query.set('archived','1');
+    const data = await api(`/mine?${query}`);
     rows = data.items;
-    content = rows.length ? `<div class="record-list">${rows.map(recordCard).join('')}</div>${pager(url.pathname + url.search,data)}`
-      : empty(tab === 'found' ? 'Você ainda não registrou itens encontrados' : 'Você ainda não registrou perdas',
+    const toggle = link(withQuery(path,'arquivados',archived ? null : '1'),
+      archived ? 'Ver registros ativos' : 'Ver arquivados',{ cls:'text-link',symbol:archived ? 'back' : 'archive' });
+    let list;
+    if (rows.length) list = `<div class="record-list">${rows.map(recordCard).join('')}</div>`;
+    else if (archived) list = empty('Nenhum registro arquivado','Os registros que você arquivar aparecerão aqui.','','archive');
+    else list = empty(tab === 'found' ? 'Você ainda não registrou itens encontrados' : 'Você ainda não registrou perdas',
         tab === 'found' ? 'Quando publicar um objeto encontrado, ele aparecerá aqui.' : 'Registre uma perda para consultar objetos compatíveis.',
         link(`/novo/${tab}`,tab === 'found' ? 'Registrar um encontrado' : 'Registrar uma perda',{ cls:'button primary',symbol:'plus' }));
+    content = `<div class="back-row">${toggle}</div>${list}${pager(path,data)}`;
   }
   if (token !== navigation) return;
   site.innerHTML = shell(`${header('Meus registros','Acompanhe seus objetos e o andamento das devoluções.',link('/novo','Registrar item',{ cls:'button primary',symbol:'plus' }))}
     ${tabs(recordTabs,tab)}${content}`);
-  actions['qr-record'] = button => qrLabel(rows.find(item => item.id === button.dataset.id));
-  actions['return-record'] = button => returnDialog(rows.find(item => item.id === button.dataset.id));
+  const itemFor = button => rows.find(item => item.id === button.dataset.id);
+  actions['qr-record'] = button => qrLabel(itemFor(button));
+  actions['return-record'] = button => returnDialog(itemFor(button));
+  actions['edit-own'] = button => editRecord(itemFor(button),true);
+  for (const [action,title,description] of [
+    ['archive','Arquivar registro','O registro sairá da lista ativa. Você poderá restaurá-lo em Arquivados.'],
+    ['restore','Restaurar registro','O registro voltará para a sua lista ativa.']
+  ]) {
+    actions[`${action}-own`] = button => confirmAction(title,description,async () => {
+      const item = itemFor(button);
+      const { publication } = await api(`/mine/${item.id}/archive`,{ method:'POST',body:{ action,updatedAt:item.updatedAt } });
+      notify(action === 'archive' ? 'Registro arquivado.' : publication === 'pending' ? 'Registro restaurado e enviado para revisão.' : 'Registro restaurado.');
+      go(path,{ keepScroll:true });
+    },title);
+  }
   if (tab === 'contacts') bindContactActions(rows);
 }
 
@@ -664,7 +725,7 @@ function contactCards(contacts) {
       contact.phone && `<a class="button secondary whatsapp" href="https://wa.me/${e(contact.phone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}WhatsApp</a>`
     ].filter(Boolean).join('');
     return `<article class="contact-card panel"><div class="record-tags">${badge(contact.status)}<span class="item-category">${received ? 'Recebida' : 'Enviada'}</span></div>
-      <h3>${link(itemHref(contact.itemId),e(contact.title),{ cls:'record-title' })}</h3><p class="contact-by">${e(contact.requesterName || custodyText[contact.custody])} · ${niceDate(contact.createdAt)}</p>
+      <h3>${contact.canViewItem ? link(itemHref(contact.itemId),e(contact.title),{ cls:'record-title' }) : e(contact.title)}</h3><p class="contact-by">${e(contact.requesterName || custodyText[contact.custody])} · ${niceDate(contact.createdAt)}</p>
       <p class="contact-message">${e(contact.message)}</p>
       ${contact.sector ? `<p class="notice">${icon('pin')} ${e(contact.sector.location)}${contact.sector.hours ? ' · ' + e(contact.sector.hours) : ''}</p>` : ''}
       ${contact.status === 'delivered' && !received ? `<div class="record-actions">${link(itemHref(contact.itemId),'Ver devolução',{ symbol:'check' })}</div>` : ''}
@@ -943,17 +1004,7 @@ function bindAdminItems(items) {
   ]) {
     actions[`admin-${action}`] = button => confirmAction(title,text,() => update(itemFor(button),action),title);
   }
-  actions['admin-edit'] = button => {
-    const item = itemFor(button);
-    const categories = session.categories.some(cat => cat.id === item.categoryId) ? session.categories : [...session.categories,{ id:item.categoryId,name:item.category }];
-    modal('Editar registro',`<form class="stack" id="admin-edit-form">${itemFields(item.kind,item,categories)}
-      <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Salvar alterações','check')}</div></form>`);
-    onForm('#admin-edit-form', async data => {
-      await api(`/admin/items/${item.id}`,{ method:'PATCH',body:{ ...data,sharePhone:item.sharePhone } });
-      notify('Registro atualizado.');
-      go(location.pathname + location.search,{ keepScroll:true });
-    });
-  };
+  actions['admin-edit'] = button => editRecord(itemFor(button));
   actions['admin-return'] = async button => {
     const item = itemFor(button);
     const candidates = item.reservedLostId ? [] : (await api(`/admin/items/${item.id}/candidates`)).items;
