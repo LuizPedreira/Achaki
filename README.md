@@ -1,5 +1,7 @@
 # Achaki · Achados e Perdidos da Fatec Taquaritinga
 
+**[Abrir o Achaki publicado](https://achaki.jrsites.online/)**
+
 Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
 ## Rodar no computador
@@ -19,7 +21,7 @@ Abra [http://127.0.0.1:8787](http://127.0.0.1:8787). A demonstração local usa 
 | Lucas, usuário | `lucas@demo.achaki.test` |
 | Setor, administrador | `setor@demo.achaki.test` |
 
-`npm run dev` abre a versão local com banco vazio. Nela, os links de recuperação aparecem no terminal. O ambiente de demonstração e o ambiente vazio têm bancos locais próprios. O protótipo original continua disponível pelo [GitHub Pages](https://luizpedreira.github.io/Achaki/). Seus registros eram gravados em cada navegador. Contas, fotos e objetos dessa versão exigem migração a partir de uma exportação do navegador de origem.
+`npm run dev` abre a versão local com banco vazio. Nela, os links de recuperação aparecem no terminal. O ambiente de demonstração e o ambiente vazio têm bancos locais próprios. O protótipo original está em [GitHub Pages · protótipo](https://luizpedreira.github.io/Achaki/prototipo.html). Seus registros eram gravados em cada navegador. Contas, fotos e objetos dessa versão exigem migração a partir de uma exportação do navegador de origem.
 
 Se houver registros reais na versão anterior, o painel antigo permite exportá-los em JSON no navegador onde foram cadastrados.
 
