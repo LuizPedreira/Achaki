@@ -167,7 +167,7 @@ function card(item, lostId = '') {
   return `<article class="mural-record"><a href="${e(href)}" data-nav>
     <span class="mural-photo">${cover(item)}</span><div class="mural-object"><span class="object-category">${e(item.category)}</span>
       <h3>${e(item.title)}</h3><div class="item-meta">${rowInfo('pin',item.location || 'Local não informado')}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
-      ${lostId ? `<p class="match-reason">${e(item.reasons?.join(' · ') || 'Mesma categoria')}</p>` : ''}
+
     </div><div class="mural-state">${badge(item.status,item.status === 'open' ? 'Disponível' : statusText[item.status])}
       ${item.status !== 'returned' ? `<small>${item.custody === 'campus' ? 'No setor' : 'Com quem encontrou'}</small>` : ''}</div>
     <span class="row-arrow">${icon('chev')}</span></a></article>`;
@@ -245,15 +245,16 @@ function authPage(path, url) {
   const institutional = url.searchParams.get('institucional');
   const institutionMessage = institutional === 'vinculado' ? 'Esta conta institucional já está vinculada.' : institutional === 'falhou' ? 'Não foi possível entrar com a conta institucional. Tente novamente.' : '';
   site.innerHTML = shell(`<section class="original-auth"><div class="auth-titlebar">
-    ${link(login ? '/' : `/entrar${target}`,'',{ cls:'button secondary auth-back',symbol:'back',attrs:'aria-label="Voltar"' })}
-    <span>${title}</span></div><div class="auth-form">
+    ${link(login ? '/' : `/entrar${target}`,'',{ cls:'icon-btn',symbol:'back',attrs:'aria-label="Voltar"' })}
+    <h2>${title}</h2><span></span></div><div class="auth-form">
     <div class="form-heading">${login ? `<span class="logo-main">${icon('box')}</span>` : ''}
       ${login?'<h1 class="auth-h1">Achados &amp; Perdidos</h1>':''}${login && session.campus ? `<small class="campus-name">${e(session.campus)}</small>` : ''}<p>${description}</p></div>
     ${unavailable ? `<div class="notice">A recuperação automática por e-mail ainda não está disponível. Procure o setor de Achados e Perdidos.</div>${link('/entrar','Voltar para o login')}` :
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
       ${!reset ? input('E-mail','email','','type="email" required maxlength="254" autocomplete="username" placeholder="voce@exemplo.com"') : ''}
       ${register ? input('Telefone / WhatsApp','phone','','type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
-      ${!forgot ? input('Senha','password','',`type="password" required ${login ? '' : 'minlength="10"'} maxlength="128" autocomplete="${login ? 'current-password' : 'new-password'}"`) : ''}
+      ${!forgot ? input('Senha','password','',`type="password" required ${login ? '' : 'minlength="10"'} maxlength="128" autocomplete="${login ? 'current-password' : 'new-password'}" ${login ? '' : 'aria-describedby="password-help"'}`) : ''}
+      ${register||reset?'<small id="password-help">Use pelo menos 10 caracteres.</small>':''}
       ${register || reset ? input('Confirmar senha','confirm','', 'type="password" required minlength="10" maxlength="128" autocomplete="new-password"') : ''}
       ${login ? `<div class="auth-options"><label class="check"><input type="checkbox" name="remember">Lembrar de mim</label>
         ${link('/recuperar-senha','Esqueci a senha',{ cls:'text-link' })}</div>` : ''}
@@ -330,18 +331,12 @@ async function ownLossPage(item, token) {
       <h1>${e(item.title)}</h1><p class="description">${e(item.description)}</p>
       <div class="inline-meta">${rowInfo('tag',item.category)}${item.location ? rowInfo('pin',item.location) : ''}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
       ${photos ? `<div class="thumbnails">${photos}</div>` : ''}</header>
-    <div class="loss-tools">${link(contactPath(item),item.contactCount ? 'Acompanhar solicitações (' + item.contactCount + ')' : 'Histórico de solicitações',{ cls:'text-link',symbol:'list' })}
-    ${item.canResolve ? btn('resolve-loss','Já recuperei meu objeto','check','secondary') : ''}</div>
-    ${open ? `<section class="loss-matches"><h2>Possíveis achados</h2>${items.length ? '<p>Compare a foto, o local e a data antes de pedir a devolução.</p>' : ''}${matches}</section>` :
+    ${item.contactCount ? link(contactPath(item),'Ver solicitação',{cls:'mini-action primary'}) : ''}
+    ${open ? `<section class="loss-matches"><h2>Meu item foi encontrado</h2>${items.length ? '<p>Selecione o item que você acredita ser o seu.</p>' : ''}${matches}</section>` :
       item.archivedAt && item.status === 'open' ? '<p class="loss-empty">Este registro foi arquivado.</p>' :
       `<section class="loss-matches"><h2>Perda encerrada</h2>${item.recoveredItemId ? link(itemHref(item.recoveredItemId),'Ver objeto devolvido',{ cls:'text-link',symbol:'check' }) : '<p>Você informou que recuperou este objeto por conta própria.</p>'}</section>`}
     </div>`);
   actions.gallery = button => showGallery(item,Number(button.dataset.index));
-  actions['resolve-loss'] = () => confirmAction('Já recuperou este objeto?',`A perda de “${item.title}” ficará como recuperada no seu histórico.`,async () => {
-    await api(`/mine/${item.id}/resolve`,{ method:'POST',body:{ updatedAt:item.updatedAt } });
-    notify('Perda encerrada.');
-    go(itemHref(item.id),{ keepScroll:true });
-  },'Sim, já recuperei');
 }
 
 function showGallery(item, index) {
@@ -415,16 +410,21 @@ function itemForm(kind, url) {
   const pointOptions = [['','Selecione'],...session.locations.map(l=>[l.name,l.name])];
   if(draft.location && !pointOptions.some(([value])=>value===draft.location)) pointOptions.push([draft.location,draft.location]);
   site.innerHTML=shell(`<div class="auth-titlebar">${link('/',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}<h2>Registrar item ${found?'encontrado':'perdido'}</h2><span></span></div>
-    <form class="stack" id="item-form">${found?'':'<div class="notice">Descreva o item com o máximo de detalhes. Você também pode adicionar fotos de referência para facilitar a identificação.</div>'}
+    <form class="original-item-form" id="item-form">${found?'':'<div class="notice">Descreva o item com o máximo de detalhes. Você também pode adicionar fotos de referência para facilitar a identificação.</div>'}
     <div class="upload-zone"><div class="upload-title"><div><b>${found?'Fotos do item':'Fotos de referência (opcional)'}</b><div class="tiny muted">${found?'Adicione de 1 a 3 fotos. A primeira será a capa.':'Até 3 fotos do item perdido.'}</div></div><span id="photo-total" class="tiny muted"></span></div>
-    <div class="photo-grid" id="photo-previews"></div><div class="photo-actions"><label class="photo-action-btn upload-button">${icon('image')}Escolher foto<input type="file" id="photo-files" accept="image/*" multiple></label><label class="photo-action-btn upload-button">${icon('camera')}Usar câmera<input type="file" id="photo-camera" accept="image/*" capture="environment"></label></div></div>
+    <div class="photo-grid" id="photo-previews"></div><div class="photo-actions">
+      ${btn('photo-file','<span><b>Escolher foto</b><small>Galeria ou arquivos</small></span>','camera','photo-action-btn')}
+      ${btn('photo-capture','<span><b>Usar câmera</b><small>Em celulares compatíveis</small></span>','camera','photo-action-btn')}
+      <input type="file" id="photo-files" accept="image/*" multiple hidden><input type="file" id="photo-camera" accept="image/*" capture="environment" hidden></div>
+      <div class="photo-message">As fotos são redimensionadas automaticamente.</div></div>
     ${input(found?'Título do item':'O que você perdeu?','title',draft.title,'class="control" required minlength="3" maxlength="90"')}
     ${textarea('Descrição','description',draft.description,'class="control" required minlength="8" maxlength="1200"')}
     <div class="grid2">${select('Categoria','categoryId',categoryOptions(),draft.categoryId,'class="control" required')}
     ${input(found?'Data do encontro':'Data aproximada','occurredOn',draft.occurredOn||today(),`class="control" type="date" required max="${today()}"`)}</div>
     ${select(found?'Local onde foi encontrado':'Onde acha que perdeu? (opcional)','location',pointOptions,draft.location,found?'class="control" required':'class="control"')}
-    ${found?`<fieldset class="custody"><legend>Onde o item está agora?</legend><label class="choice-option"><input type="radio" name="custody" value="finder" ${checked(draft.custody==='finder')}>Está comigo</label><label class="choice-option"><input type="radio" name="custody" value="campus" ${checked(draft.custody!=='finder')}>Entreguei na Fatec</label></fieldset>`:`<label class="check"><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone==='on')}>Compartilhar meu contato com o setor</label>`}
+    ${found?`<fieldset class="field"><legend>Onde o item está agora?</legend><div class="choice-grid"><label class="choice-card"><input type="radio" name="custody" value="finder" ${checked(draft.custody==='finder')}><b>Está comigo</b><span>Quem perdeu poderá combinar a retirada com você.</span></label><label class="choice-card"><input type="radio" name="custody" value="campus" ${checked(draft.custody!=='finder')}><b>Entreguei na Fatec</b><span>O item está no setor de Achados e Perdidos.</span></label></div></fieldset>`:`<label class="record-card row between"><span><b>Compartilhar meu contato</b><small>Permite que a equipe fale com você.</small></span><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone==='on')}></label>`}
     <small class="draft-note">${icon('check')} Rascunho salvo automaticamente nesta aba</small>
+    ${found?'<div class="notice green">Ao publicar, o item aparece imediatamente na busca.</div>':''}
     <div class="form-error" role="alert"></div>${submit(found?'Publicar registro':'Registrar solicitação')}</form>`);
   drawPhotos();
   const form = qs('#item-form');
@@ -432,6 +432,8 @@ function itemForm(kind, url) {
     if (event.target.type === 'file') return;
     try { sessionStorage.setItem(draftKey(kind),JSON.stringify(Object.fromEntries(new FormData(form)))); } catch {}
   });
+  actions['photo-file']=()=>qs('#photo-files').click();
+  actions['photo-capture']=()=>qs('#photo-camera').click();
   for (const key of ['photo-files','photo-camera']) qs(`#${key}`).addEventListener('change', event => void acceptPhotos(event.target));
   onForm('#item-form', async data => {
     const formDraft = photoDraft;
@@ -459,7 +461,7 @@ function itemForm(kind, url) {
     clearPhotoDraft();
     notify(found ? (response.item.publication === 'pending' ? 'Item enviado para revisão.' : 'Item publicado.') : 'Perda registrada.');
     go('/meus-registros');
-    modal(found?'Item publicado com sucesso':'Solicitação registrada com sucesso',`<p>${e(response.item.title)}</p><div class="form-actions">${link('/meus-registros','Meus registros',{cls:'btn full'})}${link('/','Voltar ao início',{cls:'btn secondary'})}</div>`);
+    modal(found?'Registro publicado com sucesso':'Solicitação registrada com sucesso',`<p>${found?'O item já está disponível na busca.':e(response.item.title)}</p>${found?`<p><b>${e(response.item.title)}</b><br>Em aberto · ${e(response.item.location)}</p>`:''}<div class="form-actions">${found?link(itemHref(response.item.id),'Ver registro',{cls:'btn full'}):link('/','Voltar ao início',{cls:'btn secondary'})}${link('/meus-registros','Meus registros',{cls:'btn secondary'})}</div>`);
 
   });
 }
@@ -537,22 +539,6 @@ async function acceptPhotos(input) {
   }
 }
 
-actions.suggest = async button => {
-  const firstPhoto = photoDraft?.photos[0];
-  if (!firstPhoto) return notify('Adicione uma foto antes de pedir uma sugestão.');
-  button.disabled = true;
-  try {
-    const thumbnail = await compress(firstPhoto.blob,448,100_000);
-    const { category } = await api('/media/suggestion',{ method:'POST',body:thumbnail });
-    const field = qs('#item-form [name=categoryId]');
-    if (category && field) {
-      field.value = category.id;
-      field.dispatchEvent(new Event('input',{ bubbles:true }));
-      notify(`Sugestão: ${category.name}. Você pode ajustar a categoria.`);
-    } else notify('Escolha a categoria manualmente para esta foto.');
-  } finally { button.disabled = false; }
-};
-
 function tabs(items, active) {
   return `<nav class="tabs" aria-label="Seções">${items.map(([url,text,key]) =>
     link(url,text,{ cls:`tab ${key === active ? 'on' : ''}`,attrs:key === active ? 'aria-current="page"' : '' })).join('')}</nav>`;
@@ -593,7 +579,10 @@ function recordCard(item) {
     controls.push(btn('return-record','Registrar devolução','check','primary',key));
   }
   if (!found && active && !item.recoveryForId && !item.contactCount) controls.push(btn('match-record','Meu item foi encontrado','search','mini-action primary',key));
-  if (!archived && !found && item.recoveredItemId) controls.push(link(itemHref(item.recoveredItemId),'Ver devolução',{ symbol:'check' }));
+  if (!archived && !found && item.recoveredItemId) {
+    controls.push(link(receiptHref(item.recoveredItemId),'Ver devolução',{symbol:'check'}));
+    if (!item.recipientRating) controls.push(btn('rate-record','Avaliar devolução','star','mini-action primary',`data-id="${e(item.recoveredItemId)}"`));
+  }
 
   if (item.contactCount && (!found || item.custody === 'finder') && active) controls.push(link(contactPath(item),`${item.contactCount} solicitaç${item.contactCount === 1 ? 'ão' : 'ões'}`,{ cls:'button secondary',symbol:'bell' }));
   if (!archived && found && item.status === 'returned' && !item.finderRating && item.recipientId !== session.user.id) {
@@ -701,10 +690,9 @@ function contactCards(contacts,queue = '') {
     const received = contact.side === 'received';
     const key = `data-id="${contact.id}"`;
     const primary = [], extra = [];
-    if (contact.canApprove && !contact.whatsappReservation) primary.push(btn('contact-approve','Aprovar e reservar','check','primary',key));
-    if (contact.canDeliver) primary.push(btn('contact-return','Registrar entrega','check','secondary',key));
-    if (contact.canReview) primary.push(btn('contact-reject','Recusar pedido','x','quiet',key));
-    if (contact.canRevoke) extra.push(btn('contact-reject','Revogar aprovação','x','quiet',key));
+    if (contact.canDeliver) primary.push(btn('contact-return','Confirmar entrega','check','secondary',key));
+    if (contact.canReview) primary.push(btn('contact-reject','Não é o proprietário','x','quiet',key));
+    if (contact.canRevoke) extra.push(btn('contact-reject','Não é o proprietário','x','quiet',key));
     if (!received && ['pending','approved'].includes(contact.status)) extra.push(btn('contact-cancel','Cancelar pedido','','quiet',key));
     if (contact.side==='sent' && contact.whatsappReservation) primary.push(link(itemHref(contact.itemId),'Abrir conversa novamente',{cls:'whatsapp-btn',symbol:'whatsapp'}));
     if (contact.phone) primary.push(`<a class="whatsapp-btn" href="https://wa.me/${e(contact.phone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}Abrir WhatsApp</a>`);
@@ -770,7 +758,7 @@ async function receiptPage(itemId,token) {
   if (!needUser(receiptHref(itemId))) return;
   const {receipt} = await api(`/items/${itemId}/receipt`);
   if (token !== navigation) return;
-  document.title = 'Comprovante de devolução · ' + receipt.title;
+  document.title = 'Informações da devolução · ' + receipt.title;
   const timestamp = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(receipt.recordedAt));
   const field = (label,value) => `<div><dt>${label}</dt><dd>${e(value)}</dd></div>`;
   site.innerHTML = shell(`<div class="receipt-page"><div class="receipt-controls">
@@ -813,7 +801,12 @@ async function profilePage(url,token) {
     ${session.features.sso&&!u.institutional?'<a class="btn secondary full" href="/api/auth/microsoft?link=1">Vincular conta institucional</a>':''}
     ${btn('logout','Sair da conta','logout','btn secondary full')}`);
   actions['profile-requests']=()=>go(contactsPage);
-  actions['profile-ratings']=()=>go('/meus-registros?aba=avaliacoes');
+  actions['profile-ratings']=async ()=>{
+    const {items}=await api('/ratings');
+    if(token!==navigation)return;
+    const ratings=items.map(r=>`<article class="record-card"><div class="row between"><div><b>${e(r.title)}</b><div class="tiny muted">${r.perspective==='finder'?'Quem encontrou':'Quem recuperou'} · ${niceDate(r.createdAt)}</div></div><span class="badge returned">${e(r.score)}/5 ★</span></div>${r.comment?`<p>${e(r.comment)}</p>`:''}</article>`).join('');
+    modal('Minhas avaliações',ratings||'<p>Você ainda não enviou avaliações.</p>','prototype-sheet');
+  };
   actions['profile-help']=()=>go('/ajuda');
   actions['profile-data']=()=>{
     modal('Dados pessoais',`<form class="stack" id="profile-form">${input('Nome completo','name',u.name,'required minlength="2" maxlength="90"')}
@@ -867,8 +860,8 @@ function helpPage() {
 }
 
 const adminNav = [
-  ['/painel','Visão geral','dashboard'], ['/painel/encontrados','Encontrados','box'],
-  ['/painel/perdidos','Perdidos','search'], ['/painel/solicitacoes','Solicitações','bell'],
+  ['/painel','Visão geral','dashboard'], ['/painel/encontrados','Itens encontrados','box'],
+  ['/painel/perdidos','Itens perdidos','search'],
   ['/painel/historico','Histórico','history'], ['/painel/usuarios','Usuários','users'],
   ['/painel/configuracoes','Configurações','settings']
 ];
@@ -877,7 +870,7 @@ function adminShell(content, path) {
   const menu=adminNav.map(([url,name,symbol])=>link(url,icon(symbol)+' '+e(name),{cls:url===path?'active':''})).join('');
   return `<div class="admin-app"><aside class="admin-sidebar"><div class="admin-brand"><div class="brand-mark">${icon('box')}</div><div><b>Achados &amp; Perdidos</b><span>Painel administrativo</span></div></div>
     <nav class="admin-menu">${menu}</nav><div class="admin-spacer"></div><div class="admin-profile"><div class="avatar">${e(initial(session.user.name))}</div><div><b>${e(session.user.name)}</b><span>Administrador</span></div>${btn('logout','','logout','icon-btn','aria-label="Sair"')}</div></aside>
-    <main id="conteudo" class="admin-main" tabindex="-1"><header class="admin-topbar"><h1>${e(adminNav.find(([url])=>url===path)?.[1]||'Painel')}</h1>${link('/','Início',{cls:'link'})}</header><nav class="mobile-admin-bar">${menu}</nav><div class="admin-content">${content}</div></main></div>`;
+    <main id="conteudo" class="admin-main" tabindex="-1"><header class="admin-topbar"><h1>${e(adminNav.find(([url])=>url===path)?.[1]||'Solicitações de contato')}</h1>${link('/','Início',{cls:'link'})}</header><nav class="mobile-admin-bar">${menu}</nav><div class="admin-content">${content}</div></main></div>`;
 }
 
 async function adminPage(url, token) {
@@ -920,8 +913,6 @@ async function adminOverview(token,path) {
     link('/novo/found','Registrar encontrado',{ cls:'button primary',symbol:'plus' }))}
     <div class="stat-grid">${stats.map(([symbol,num,label,href]) => `<a href="${href}" class="stat panel" data-nav>
       <span class="choice-icon">${icon(symbol)}</span><strong>${num}</strong><span>${label}</span></a>`).join('')}</div>
-    ${counts.review ? `<div class="notice">${icon('bell')}${counts.review} ${counts.review === 1 ? 'registro aguarda' : 'registros aguardam'} revisão.
-      ${link('/painel/encontrados?review=1','Revisar registros',{ cls:'text-link' })}</div>` : ''}
     <div class="dashboard-grid"><section class="panel board"><h2>Registros recentes</h2>
       ${recent.length ? recent.map(item => `<div class="board-row"><div>${link(itemHref(item.id),e(item.title),{ cls:'record-title' })}
        <p>${kindText[item.kind]} · ${e(item.category)} · ${niceDate(item.createdAt)}</p></div>${badge(item.status)}</div>`).join('')
@@ -942,7 +933,7 @@ async function itemManagement(url,token) {
   const data = await api(`/admin/items?${params}`);
   if (token !== navigation) return;
   const archived = params.get('archived') === '1';
-  const review = params.get('review') === '1';
+
   const statuses = historyMode ? [['','Todos'],...displayStatus(['open','reserved','returned','recovered'])]
     : [['','Todos'],...displayStatus(lost ? ['open','recovered'] : ['open','reserved','returned'])];
   const row = item => {
@@ -955,11 +946,9 @@ async function itemManagement(url,token) {
         controls.push(btn('admin-edit','Editar','edit','quiet',key));
         if (item.kind === 'found') {
           if (item.publication !== 'public') controls.push(btn('admin-approve','Publicar','check','quiet',key));
-          if (item.publication === 'public') controls.push(btn('admin-hide','Ocultar','','quiet',key));
           if (item.status === 'open') controls.push(btn('admin-reserve','Reservar','','quiet',key));
           if (item.status === 'reserved') controls.push(btn('admin-reopen','Reabrir','','quiet',key));
           if (item.status !== 'returned' && item.custody === 'campus') controls.push(btn('admin-return','Devolver','check','primary',key));
-          if (item.status !== 'returned' && item.custody === 'finder') controls.push(btn('admin-receive','Receber no setor','building','quiet',key));
 
         }
         if (item.contactPhone) controls.push(`<a class="button quiet" href="https://wa.me/${e(item.contactPhone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}WhatsApp</a>`);
@@ -979,12 +968,12 @@ async function itemManagement(url,token) {
   const pageTabs = historyMode ? [
     [`${path}?history=complete`,'Devolvidos','complete'],[`${path}?history=pending`,'Não devolvidos','pending'],[`${path}?archived=1`,'Arquivados','archived']
   ] : [
-    [path,'Ativos','active'],...(!lost ? [[`${path}?review=1`,'Em revisão','review']] : []),[`${path}?archived=1`,'Arquivados','archived']
+    [path,'Ativos','active'],[`${path}?archived=1`,'Arquivados','archived']
   ];
   site.innerHTML = adminShell(`${header(historyMode ? 'Histórico' : lost ? 'Itens perdidos' : 'Itens encontrados',
     historyMode ? 'Consulte entregas concluídas, registros em aberto e avaliações.' : lost ? 'Gerencie as perdas registradas e possíveis correspondências.' : 'Acompanhe a guarda, as reservas e a publicação dos objetos.',
     historyMode ? `<a class="button secondary" href="/api/admin/history.csv?${e(exportQuery.toString())}" download>${icon('download')}Exportar CSV</a>` : lost ? '' : link('/novo/found','Novo encontrado',{ cls:'button primary',symbol:'plus' }))}
-    ${tabs(pageTabs,archived ? 'archived' : historyMode ? params.get('history') : review ? 'review' : 'active')}
+    ${tabs(pageTabs,archived ? 'archived' : historyMode ? params.get('history') : 'active')}
     <form class="panel table-filter" id="table-filter">${input('Buscar','q',params.get('q'),'maxlength="120" placeholder="Nome, descrição ou local"')}
       ${select('Categoria','category',categoryOptions('Todas'),params.get('category') || '')}
       ${select('Status','status',statuses,params.get('status') || '')}

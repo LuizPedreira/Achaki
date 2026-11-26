@@ -8,15 +8,12 @@ const linkedReservation = `i.kind = 'lost' AND EXISTS (SELECT 1 FROM items f
   WHERE f.reserved_lost_id = i.id AND f.status = 'reserved' AND f.archived_at IS NULL)`;
 const authorCanChange = `i.status = 'open' AND (i.kind = 'lost' OR i.custody = 'finder')
   AND (${activeContactCount}) = 0 AND NOT (${linkedReservation})`;
-const authorPublication = `CASE WHEN i.kind = 'found' AND i.publication = 'public' AND ? = 'user'
-  AND (SELECT review_required FROM settings WHERE id = 1) = 1 THEN 'pending' ELSE i.publication END`;
-
 export const itemQuery = `SELECT i.*, c.name AS category, u.name AS author_name, u.phone AS author_phone,
   r.returned_on, r.id AS return_id, r.actor_id AS return_actor_id, r.recipient_id, r.recipient_name, r.notes AS return_notes, r.lost_id,
   (SELECT group_concat(m.id) FROM (SELECT id FROM media WHERE item_id = i.id AND discard = 0 ORDER BY position) m) AS photos,
   (${activeContactCount}) AS contact_count, (${linkedReservation}) AS linked_reservation,
   (SELECT score FROM ratings WHERE item_id = i.id AND perspective = 'finder') AS finder_rating,
-  (SELECT score FROM ratings WHERE item_id = i.id AND perspective = 'recipient') AS recipient_rating,
+  (SELECT score FROM ratings WHERE item_id = COALESCE((SELECT item_id FROM returns WHERE lost_id = i.id),i.id) AND perspective = 'recipient') AS recipient_rating,
   (SELECT item_id FROM returns WHERE lost_id = i.id) AS recovered_item_id
   FROM items i JOIN categories c ON c.id = i.category_id JOIN users u ON u.id = i.author_id
   LEFT JOIN returns r ON r.item_id = i.id`;
@@ -247,26 +244,13 @@ export async function listMatches(env, user, lostId) {
   const lost = await loadItem(env, lostId);
   if (!lost || lost.kind !== 'lost' || lost.archived_at || lost.status !== 'open' ||
     (lost.author_id !== user.id && user.role !== 'admin')) throw new HttpError(404, 'Registro de perda não encontrado.');
-  const ignore = new Set(('com dos das meu minha meus minhas uma uns umas sem para que item objeto perdido perdida ' +
-    normalize(lost.category)).split(' '));
-  const words = [...new Set(normalize(lost.title).split(/[^\p{L}\p{N}]+/u))].filter(word => word.length >= 3 && !ignore.has(word)).slice(0, 6);
-  const place = normalize(lost.location || '');
-  const items = await all(env, `WITH ranked AS (
-    SELECT f.id, f.created_at, abs(julianday(f.occurred_on) - julianday(?)) AS days_apart,
-      (? <> '' AND substr(f.search_text, instr(f.search_text, char(31)) + 1) = ?) AS same_place,
-      (SELECT count(*) FROM json_each(?) w WHERE instr(' ' || substr(f.search_text,1,instr(f.search_text,char(31))-1), ' ' || w.value) > 0) AS common_words
-    FROM items f WHERE f.kind = 'found' AND f.publication = 'public' AND f.archived_at IS NULL
-      AND f.author_id <> ? AND f.category_id = ? AND (f.status = 'open' OR (f.status = 'reserved' AND f.reserved_lost_id = ?))
-      AND ${lost.recovery_for_id ? 'f.id = ?' : "f.occurred_on >= date(?, '-7 days')"}
-    ORDER BY common_words DESC, same_place DESC, days_apart, f.created_at DESC, f.id LIMIT 15
-  ) SELECT matched.*, ranked.common_words, ranked.same_place, ranked.days_apart
-    FROM ranked JOIN (${itemQuery}) matched ON matched.id = ranked.id
-    ORDER BY ranked.common_words DESC, ranked.same_place DESC, ranked.days_apart, ranked.created_at DESC, ranked.id`,
-    lost.occurred_on, place, place, JSON.stringify(words), lost.author_id, lost.category_id, lost.id, lost.recovery_for_id || lost.occurred_on);
-  return json({ items: items.map(row => ({ ...itemView(row), reasons: [
-    ...(row.common_words ? ['Palavras em comum'] : []), ...(row.same_place ? ['Mesmo local'] : []),
-    ...(row.days_apart <= 3 ? ['Datas próximas'] : [])
-  ] })) });
+  const rows = await all(env, `${itemQuery}
+    WHERE i.kind='found' AND i.publication='public' AND i.archived_at IS NULL AND i.author_id<>?
+      AND (i.status='open' OR (i.status='reserved' AND i.reserved_lost_id=?))
+      AND (? IS NULL OR i.id=?)
+    ORDER BY (i.category_id=?) DESC, i.created_at DESC, i.id`,
+    lost.author_id,lost.id,lost.recovery_for_id,lost.recovery_for_id,lost.category_id);
+  return json({items:rows.map(row=>itemView(row))});
 }
 
 export async function claimOptions(env, user, foundId) {
@@ -325,12 +309,11 @@ export async function editItem(env, user, itemId, input, { own = false } = {}) {
   if (item.recovery_for_id) fields.fingerprint = item.fingerprint;
   try {
     const changed = await first(env, `UPDATE items AS i SET title = ?, description = ?, category_id = ?, location = ?,
-      occurred_on = ?, custody = ?, share_phone = ?, search_text = ?, fingerprint = ?, updated_by = ?, updated_at = ?,
-      publication = ${own ? authorPublication : 'i.publication'}
+      occurred_on = ?, custody = ?, share_phone = ?, search_text = ?, fingerprint = ?, updated_by = ?, updated_at = ?
       WHERE i.id = ? AND i.archived_at IS NULL AND i.updated_at = ? AND (i.category_id = ? OR (NOT (${linkedReservation}) AND NOT EXISTS (
         SELECT 1 FROM contacts c WHERE (c.item_id = i.id OR c.lost_id = i.id) AND c.status IN ('pending','approved','delivered')
       ))) ${own ? `AND i.author_id = ? AND ${authorCanChange}` : ''} RETURNING publication`,
-      ...itemValues(fields), user.id, nextUpdate(item), ...(own ? [user.role] : []),
+      ...itemValues(fields), user.id, nextUpdate(item),
       item.id, item.updated_at, fields.category.id, ...(own ? [user.id] : []));
     if (!changed) throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
     return json(changed);
@@ -347,11 +330,10 @@ export async function archiveOwnItem(env, user, itemId, input) {
   const item = await ownItemForChange(env, user, itemId, input.updatedAt, restoring);
   const time = nextUpdate(item);
   try {
-    const changed = await first(env, `UPDATE items AS i SET archived_at = ?, updated_by = ?, updated_at = ?,
-      publication = ${restoring ? authorPublication : 'i.publication'}
+    const changed = await first(env, `UPDATE items AS i SET archived_at = ?, updated_by = ?, updated_at = ?
       WHERE i.id = ? AND i.author_id = ? AND i.updated_at = ? AND ${authorCanChange}
       AND ${restoring ? 'i.archived_at IS NOT NULL AND i.updated_by = i.author_id' : 'i.archived_at IS NULL'} RETURNING publication`,
-      restoring ? null : time, user.id, time, ...(restoring ? [user.role] : []), item.id, user.id, item.updated_at);
+      restoring ? null : time, user.id, time, item.id, user.id, item.updated_at);
     if (!changed) throw new HttpError(409, 'O registro mudou. Atualize a página e tente novamente.');
     return json(changed);
   } catch (error) {

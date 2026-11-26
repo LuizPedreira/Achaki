@@ -76,7 +76,7 @@ export async function whatsapp(env,user,itemId,input) {
   }
   if (lostId && !previous) {
     const loss = await loadItem(env,lostId);
-    if (!loss || loss.kind !== 'lost' || loss.author_id !== user.id || loss.category_id !== item.category_id || loss.status !== 'open' || loss.archived_at ||
+    if (!loss || loss.kind !== 'lost' || loss.author_id !== user.id || loss.status !== 'open' || loss.archived_at ||
       (loss.recovery_for_id && loss.recovery_for_id !== item.id) || (loss.linked_reservation && !assigned) || loss.contact_count) throw new HttpError(409,'Esta perda já está vinculada ou foi encerrada.');
   }
   if (item.status === 'open' || assigned) {

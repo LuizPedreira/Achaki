@@ -120,7 +120,7 @@ async function deploy() {
   await writeFile(join(root,destination),JSON.stringify(source,null,2) + '\n');
   wrangler(['deploy','--dry-run',...production]);
   if (check) return;
-  if (!workersBuild) wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
+  wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
   wrangler(['deploy',...production]);
   await verifyPublication(source.vars.APP_ORIGIN,source.vars.APP_RELEASE);
 }

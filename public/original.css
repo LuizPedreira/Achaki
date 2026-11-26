@@ -140,3 +140,15 @@ a.item-card, .quick-card, .nav-item, .btn, .chip, .login-pill, .icon-btn, .whats
 
 .contact-gate:has(.guest-whatsapp) {grid-template-columns:36px 1fr;align-content:center;}
 .contact-gate .guest-whatsapp {grid-column:1/-1;display:flex;text-decoration:none;}
+
+.original-item-form {display:grid;gap:12px;}
+.original-item-form label:not(.row,.choice-card) {display:grid;gap:5px;font-size:12px;font-weight:650;}
+.original-item-form fieldset {margin:0;border:0;padding:0;min-width:0;}
+.original-item-form legend {font-size:12px;font-weight:700;margin-bottom:6px;}
+.original-item-form .choice-card {position:relative;display:block;cursor:pointer;}
+.original-item-form .choice-card input {position:absolute;opacity:0;width:1px;}
+.original-item-form .choice-card:has(:checked) {background:#fff5f5;border-color:var(--red);}
+.original-item-form .choice-card:focus-within {outline:2px solid var(--navy);}
+.original-item-form .record-card small {display:block;}
+.original-item-form .photo-action-btn {white-space:normal;min-width:0;}
+.original-item-form button[type=submit] {background:var(--red);color:#fff;width:100%;}

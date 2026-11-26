@@ -184,10 +184,10 @@ test('edição e arquivo do autor preservam revisão, privacidade e histórico',
   assert.equal((await finder(path,item,patch))[1].publication,'public');
   const [updated, update] = await finder(path,updatedItem,patch);
   assert.equal(updated,200);
-  assert.equal(update.publication,'pending');
+  assert.equal(update.publication,'public');
   assert.equal((await finder(path,{ ...updatedItem,title:'Versão antiga' },patch))[0],409);
-  assert.equal((await visitor('/api/items/' + item.id))[0],404);
-  assert.equal((await visitor('/api/media/' + upload))[0],404);
+  assert.equal((await visitor('/api/items/' + item.id))[0],200);
+  assert.equal((await visitor('/api/media/' + upload,undefined,{raw:true}))[0],200);
   assert.equal((await staff('/api/admin/items/' + item.id + '/action',{ action:'approve' }))[0],200);
   const publicSearch = (await visitor('/api/items?q=carregador&location=saguao'))[1];
   assert.equal(publicSearch.items[0].title,'Carregador USB-C preto');
@@ -202,9 +202,9 @@ test('edição e arquivo do autor preservam revisão, privacidade e histórico',
   const archived = (await finder('/api/mine?kind=found&archived=1'))[1].items[0];
   assert.ok(archived.archivedAt);
   const restore = { action:'restore',updatedAt:archived.updatedAt };
-  assert.equal((await finder(path + '/archive',restore))[1].publication,'pending');
+  assert.equal((await finder(path + '/archive',restore))[1].publication,'public');
   assert.equal((await finder('/api/mine?kind=found&archived=1'))[1].total,0);
-  assert.equal((await visitor('/api/items/' + item.id))[0],404);
+  assert.equal((await visitor('/api/items/' + item.id))[0],200);
   const timeline = (await staff('/api/admin/items/' + item.id + '/details'))[1].timeline;
   assert.ok(timeline.some(entry => entry.action === 'archived'));
   assert.ok(timeline.some(entry => entry.action === 'restored'));
@@ -374,8 +374,7 @@ test('comparação privada ordena por características, filtra por guarda e acom
   assert.deepEqual((await owner(options))[1].losses.map(i => i.id).sort(),[lost.id,other.id].sort());
   assert.equal((await visitor(matches))[0],401);
   const candidates = (await owner(matches))[1].items;
-  assert.deepEqual(candidates.map(i => i.id),[matching.id,cable.id]);
-  assert.deepEqual(candidates[0].reasons,['Palavras em comum','Mesmo local','Datas próximas']);
+  assert.deepEqual(candidates.map(i => i.id).sort(),[matching.id,cable.id].sort());
   assert.equal(candidates[0].authorId,undefined);
   const [sent,{contact}] = await owner('/api/items/' + matching.id + '/contact',{ lostId:lost.id,message:'O lado direito tem uma marca.' });
   assert.equal(sent,201);
@@ -383,7 +382,7 @@ test('comparação privada ordena por características, filtra por guarda e acom
   assert.equal((await owner('/api/items/' + matching.id + '/contact',{ lostId:other.id,message:'Outra marca na lateral.' }))[0],409);
   assert.equal((await owner('/api/mine?kind=lost'))[1].total,2);
   assert.equal((await finder('/api/contacts/' + contact.id,{action:'approve'},{method:'PATCH'}))[0],200);
-  assert.equal((await owner(matches))[1].items[0].status,'reserved');
+  assert.equal((await owner(matches))[1].items.find(i=>i.id===matching.id).status,'reserved');
   assert.deepEqual((await owner('/api/items/' + other.id + '/matches'))[1].items.map(i => i.id),[cable.id]);
   assert.deepEqual((await visitor('/api/items?custody=campus&status=open'))[1].items,[]);
   assert.equal((await owner('/api/mine/' + lost.id + '/resolve',{updatedAt:lost.updatedAt}))[0],409);
@@ -667,4 +666,28 @@ test('WhatsApp do setor exige número configurado e respeita a reserva administr
   assert.equal(contact.lostId,lost.id);
   assert.equal(new URL(contact.url).pathname,'/5516988883333');
   assert.equal((await staff(path+'/return',{returnedOn:today()}))[0],201);
+});
+
+test('Meu item foi encontrado permite selecionar outra categoria e um achado antigo até a avaliação',async t=>{
+  const local=app();
+  t.after(local.close);
+  const finder=local.client(),owner=local.client(),guest=local.client();
+  await finder('/api/auth/register',account('Ana Barbosa','ana@example.test'));
+  await owner('/api/auth/register',account('Lucas Martins','lucas@example.test'));
+  const image=(await finder('/api/media',photo,{binary:true}))[1].id;
+  const found=(await finder('/api/items',object('Estojo preto',{photos:[image],occurredOn:'2024-01-20'})))[1].item;
+  const lost=(await owner('/api/items',object('Meu estojo',{kind:'lost',categoryId:'acessorios'})))[1].item;
+  const matches='/api/items/'+lost.id+'/matches';
+  assert.equal((await guest(matches))[0],401);
+  assert.ok((await owner(matches))[1].items.some(x=>x.id===found.id));
+  const path='/api/items/'+found.id;
+  const [code,contact]=await owner(path+'/whatsapp',{lostId:lost.id});
+  assert.equal(code,200,JSON.stringify(contact));
+  assert.equal(contact.lostId,lost.id);
+  assert.equal((await finder(path+'/return',{returnedOn:today()}))[0],201);
+  assert.equal((await owner(path+'/rating',{score:5,comment:'Recebi o estojo.'}))[0],201);
+  const record=(await owner('/api/mine?kind=lost'))[1].items[0];
+  assert.equal(record.status,'recovered');
+  assert.equal(record.recoveredItemId,found.id);
+  assert.equal(record.recipientRating,5);
 });
