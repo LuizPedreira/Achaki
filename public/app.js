@@ -80,6 +80,7 @@ const select = (label, name, options, value, attrs = '') => `<label>${label}<sel
 const categoryOptions = (firstLabel = 'Selecione') => [['', firstLabel], ...session.categories.map(category => [category.id,category.name])];
 const locationOptions = () => session.locations.map(location => `<option value="${e(location.name)}"></option>`).join('');
 const displayStatus = (values = ['open','reserved','returned']) => values.map(value => [value,statusText[value]]);
+const receiptHref = id => `/comprovante/${encodeURIComponent(id)}`;
 const itemHref = id => `/item/${encodeURIComponent(id)}`;
 const entry = (path, name, symbol) => `<a href="${path}" data-nav ${location.pathname === path ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${name}</span></a>`;
 
@@ -186,7 +187,8 @@ function inboxLinks(counts) {
   const links = [];
   if (counts.review) links.push([contactsPage + '&fila=responder',counts.review === 1 ? '1 pedido aguarda sua resposta' : counts.review + ' pedidos aguardam sua resposta']);
   if (counts.campus) links.push(['/painel/solicitacoes?fila=responder',counts.campus === 1 ? '1 pedido aguarda o setor' : counts.campus + ' pedidos aguardam o setor']);
-  if (counts.pickup) links.push([contactsPage + '&fila=retirar',counts.pickup === 1 ? 'Combinar a retirada de 1 objeto' : 'Combinar as retiradas de ' + counts.pickup + ' objetos']);
+  if (counts.pickup) links.push([contactsPage + '&fila=retirar',counts.pickup === 1 ? 'Acompanhar 1 retirada aprovada' : 'Acompanhar ' + counts.pickup + ' retiradas aprovadas']);
+  if (counts.handoff) links.push([contactsPage + '&fila=entregar',counts.handoff === 1 ? '1 objeto reservado para entregar' : counts.handoff + ' objetos reservados para entregar']);
   return links.length ? `<nav class="mural-inbox" aria-label="Minhas pendências">${links.map(([path,label]) =>
     link(path,label + icon('chev'),{ cls:'inbox-link',symbol:'bell' })).join('')}</nav>` : '';
 }
@@ -340,6 +342,7 @@ async function detail(itemId, token) {
   }
   const recordsPath = item.kind === 'lost' ? '/meus-registros?aba=perdi' : '/meus-registros';
   if (own || item.canRate) action += link(recordsPath,'Ver meus registros',{ cls:'button secondary',symbol:'list' });
+  if (item.canViewReceipt) action += link(receiptHref(item.id),'Ver comprovante',{symbol:'list'});
   if (item.canRate && !item.rating) action += btn('rate-current','Avaliar devolução','star','secondary');
   if (item.canManage && active) action += btn('qr-current','Gerar etiqueta QR','qr','secondary');
   site.innerHTML = shell(`<div class="back-row">${link(sourceLoss ? itemHref(sourceLoss.id) : item.kind === 'lost' ? recordsPath : '/',
@@ -357,7 +360,7 @@ async function detail(itemId, token) {
       ${item.returnedOn ? `<div><dt>${icon('check')} Devolução</dt><dd>${niceDate(item.returnedOn)}</dd></div>` : ''}</dl>
     ${sourceLoss ? `<p class="loss-context">Comparando com sua perda <strong>${e(sourceLoss.title)}</strong></p>` : sourceId && session.user ? '<p class="loss-context">A perda selecionada já foi encerrada ou está indisponível.</p>' : ''}
     <div class="detail-actions">${action}${item.kind === 'found' && item.publication === 'public' ? btn('share','Compartilhar','share','secondary') : ''}</div>
-    ${item.kind === 'found' && active && !own && !status ? '<p class="hint">Informe uma característica que só a pessoa dona do objeto saberia. O responsável revisará seu pedido.</p>' : ''}</section></div>`);
+    ${item.kind === 'found' && active && !own && !status ? `<p class="pickup-explainer">Descreva um detalhe do objeto para ${item.custody === 'campus' ? 'o setor' : 'quem o encontrou'} conferir. Depois da aprovação, vocês podem combinar a retirada aqui.</p>` : ''}</section></div>`);
   actions.gallery = button => showGallery(item,Number(button.dataset.index));
   actions.claim = () => claim(item,sourceLoss);
   actions['rate-current'] = () => rate(item.id);
@@ -696,6 +699,7 @@ function recordCard(item) {
   if (!archived && found && item.status === 'returned' && !item.finderRating && item.recipientId !== session.user.id) {
     controls.push(btn('rate-record','Avaliar devolução','star','primary',key));
   }
+  if (item.canViewReceipt) controls.push(link(receiptHref(item.id),'Ver comprovante',{symbol:'list'}));
   if (item.canChange && archived) controls.push(btn('restore-own','Restaurar','history','secondary',key));
   if (item.canChange && !archived) {
     controls.push(btn('edit-own','Editar','edit','secondary',key));
@@ -714,13 +718,13 @@ function recordCard(item) {
 
 const recordTabs = [
   ['/meus-registros','Encontrei','found'], ['/meus-registros?aba=perdi','Perdi','lost'],
-  [contactsPage,'Solicitações','contacts'], ['/meus-registros?aba=avaliacoes','Avaliações','ratings']
+  [contactsPage,'Solicitações','contacts'], ['/meus-registros?aba=devolucoes','Devoluções','returns']
 ];
 
 async function records(url, token) {
   const path = url.pathname + url.search;
   if (!needUser(path)) return;
-  const tab = { perdi:'lost',contatos:'contacts',avaliacoes:'ratings' }[url.searchParams.get('aba')] || 'found';
+  const tab = { perdi:'lost',contatos:'contacts',avaliacoes:'returns',devolucoes:'returns' }[url.searchParams.get('aba')] || 'found';
   let content;
   let rows = [];
   if (tab === 'contacts') {
@@ -730,17 +734,19 @@ async function records(url, token) {
     rows = data.contacts;
     const filtered = query.has('item') || query.has('lost') || query.has('fila');
     const back = filtered ? `<div class="back-row">${link(contactsPage,'Ver todas as solicitações',{ cls:'text-link',symbol:'back' })}</div>` : '';
-    const heading = query.has('fila') ? `<h2 class="queue-heading">${query.get('fila') === 'responder' ? 'Pedidos para responder' : 'Retiradas para combinar'}</h2>` : '';
-    content = back + heading + contactCards(rows) + pager(path,data);
-  } else if (tab === 'ratings') {
-    const [data, deliveries] = await Promise.all([api('/ratings'),api('/returns')]);
-    const pending = deliveries.items.filter(item => !item.rating);
-    content = pending.length || data.items.length ? `<div class="stack">
-      ${pending.map(item => `<article class="panel simple-row"><div><h3>${e(item.title)}</h3><p>Devolução em ${niceDate(item.returnedOn)} · Avaliação disponível</p></div>
-        ${btn('rate-record','Avaliar','star','primary',`data-id="${item.id}"`)}</article>`).join('')}
-      ${data.items.map(item => `<article class="panel simple-row"><div><h3>${e(item.title)}</h3><p>${e(item.comment || (item.perspective === 'finder' ? 'Avaliação de quem encontrou' : 'Avaliação de quem recuperou'))}</p></div>
-        <strong class="rating-number">${icon('star')} ${item.score}/5</strong></article>`).join('')}</div>`
-      : empty('Nenhuma avaliação','Depois de uma devolução, você pode avaliar como foi a entrega.','','star');
+    const queue = query.get('fila');
+    const heading = {responder:'Pedidos para responder',retirar:'Minhas retiradas',entregar:'Objetos para entregar'}[queue];
+    content = back + (heading ? `<h2 class="queue-heading">${heading}</h2>` : '') + contactCards(rows,queue) + pager(path,data);
+  } else if (tab === 'returns') {
+    const data = await api('/returns?page=' + encodeURIComponent(url.searchParams.get('page') || '1'));
+    const role = {recipient:'Você recebeu',actor:'Você registrou a entrega',finder:'Você encontrou'};
+    content = (data.items.length ? `<div class="return-list">${data.items.map(item =>
+      `<article class="return-row"><div><small>${niceDate(item.returnedOn)} · ${role[item.role]}</small><h3>${e(item.title)}</h3>
+        ${item.rating ? `<p class="return-rating">${icon('star')} Sua avaliação · ${item.rating}/5</p>` : ''}
+        ${item.comment ? `<p class="return-comment">${e(item.comment)}</p>` : ''}</div><div class="record-actions">
+        ${item.canViewReceipt ? link(receiptHref(item.id),'Ver comprovante',{symbol:'list'}) : ''}
+        ${item.canRate && !item.rating ? btn('rate-record','Avaliar entrega','star','quiet',`data-id="${item.id}"`) : ''}</div></article>`).join('')}</div>` :
+      empty('Nenhuma devolução registrada','As entregas dos objetos que você encontrou ou recuperou aparecerão aqui.','','box')) + pager(path,data);
   } else {
     const archived = url.searchParams.get('arquivados') === '1';
     const query = new URLSearchParams({ kind:tab, page:url.searchParams.get('page') || '1' });
@@ -780,51 +786,125 @@ async function records(url, token) {
 
 actions.transfer = button => {
   const item = button.dataset.id;
-  confirmAction('Entregou o objeto ao setor?','O setor ficará responsável por analisar solicitações e registrar a devolução.',
+  confirmAction('Entregou o objeto ao setor?','O setor passa a cuidar da entrega. Se já havia um horário combinado, a pessoa precisará combinar a retirada com a equipe.',
     async () => { await api(`/items/${item}/transfer`,{ method:'POST',body:{} }); notify('Guarda atualizada.'); go(location.pathname + location.search); },'Confirmar entrega ao setor');
 };
 
-function contactCards(contacts) {
-  if (!contacts.length) return empty('Nenhuma solicitação','Os pedidos que você enviar ou receber aparecerão aqui.','','bell');
-  return `<div class="stack">${contacts.map(contact => {
+const pickupDay = new Intl.DateTimeFormat('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+const pickupClock = new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'America/Sao_Paulo'});
+const meetingTime = when => pickupDay.format(new Date(when.slice(0,10) + 'T12:00:00Z')) + ' às ' + when.slice(11);
+
+function pickupPanel(contact) {
+  const {agreed,proposal} = contact.pickup;
+  const mine = proposal?.by === (contact.side === 'received' ? 'custodian' : 'requester');
+  const elapsed = proposal && proposal.when <= today() + 'T' + pickupClock.format(new Date());
+  const key = `data-id="${contact.id}"`;
+  const meeting = (label,info,confirmed) => `<div class="meeting-slip${confirmed ? ' confirmed' : ''}">
+    <span>${icon(confirmed ? 'check' : 'calendar')}${label}</span><strong>${e(meetingTime(info.when))}</strong><p>${icon('pin')}${e(info.place)}</p></div>`;
+  const controls = [];
+  if (proposal && !mine && !elapsed) controls.push(btn('pickup-confirm','Confirmar horário','check','primary',key));
+  if (agreed) controls.push(`<a class="button secondary" href="/api/contacts/${e(contact.id)}/calendar.ics" download="retirada.ics">${icon('calendar')}Adicionar à agenda</a>`);
+  controls.push(btn('pickup-propose',agreed || proposal ? 'Sugerir outro horário' : 'Sugerir local e horário','calendar',agreed || proposal ? 'quiet' : 'primary',key));
+  return `<section class="pickup-panel" aria-label="Combinar retirada">
+    ${agreed ? meeting('Retirada confirmada',agreed,true) : ''}
+    ${proposal ? meeting(mine ? 'Sua sugestão' : 'Sugestão recebida',proposal,false) : ''}
+    ${!agreed && !proposal ? '<h4>Combinar a retirada</h4><p>Sugira um ponto de encontro e um horário. A outra pessoa pode confirmar ou sugerir uma alternativa.</p>' : ''}
+    ${proposal ? `<p class="meeting-note">${elapsed ? 'O horário sugerido já passou.' : mine ? 'Aguardando a confirmação da outra parte.' : agreed ? 'O horário confirmado continua valendo até vocês aceitarem a alteração.' : 'Confira o local e o horário antes de confirmar.'}</p>` : ''}
+    <div class="record-actions">${controls.join('')}</div>
+    ${agreed || proposal ? '<small class="meeting-zone">Horário de Brasília</small>' : ''}</section>`;
+}
+
+function contactCards(contacts,queue = '') {
+  if (!contacts.length) {
+    const titles = {responder:'Nenhum pedido aguardando resposta',retirar:'Nenhuma retirada aprovada',entregar:'Nenhuma entrega reservada'};
+    return empty(titles[queue] || 'Nenhuma solicitação',queue ? '' : 'Os pedidos que você enviar ou receber aparecerão aqui.','','bell');
+  }
+  return `<div class="contact-list">${contacts.map(contact => {
     const received = contact.side === 'received';
-    const actions = [
-      contact.canApprove && btn('contact-approve','Aprovar e reservar','check','primary',`data-id="${contact.id}"`),
-      contact.canDeliver && btn('contact-return','Registrar devolução','check','secondary',`data-id="${contact.id}"`),
-      (contact.canReview || contact.canRevoke) && btn('contact-reject','Recusar','x','quiet',`data-id="${contact.id}"`),
-      !received && ['pending','approved'].includes(contact.status) && btn('contact-cancel','Cancelar pedido','','quiet',`data-id="${contact.id}"`),
-      contact.phone && `<a class="button secondary whatsapp" href="https://wa.me/${e(contact.phone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}WhatsApp</a>`
-    ].filter(Boolean).join('');
-    return `<article class="contact-card panel"><div class="record-tags">${badge(contact.status)}<span class="item-category">${received ? 'Recebida' : 'Enviada'}</span></div>
-      <h3>${contact.canViewItem ? link(itemHref(contact.itemId),e(contact.title),{ cls:'record-title' }) : e(contact.title)}</h3><p class="contact-by">${e(contact.requesterName || custodyText[contact.custody])} · ${niceDate(contact.createdAt)}</p>
-      <p class="contact-message">${e(contact.message)}</p>
-      ${contact.sector ? `<p class="notice">${icon('pin')} ${e(contact.sector.location)}${contact.sector.hours ? ' · ' + e(contact.sector.hours) : ''}</p>` : ''}
-      ${contact.status === 'delivered' && !received ? `<div class="record-actions">${link(itemHref(contact.itemId),'Ver devolução',{ symbol:'check' })}</div>` : ''}
-      ${actions ? `<div class="record-actions">${actions}</div>` : ''}</article>`;
+    const key = `data-id="${contact.id}"`;
+    const primary = [], extra = [];
+    if (contact.canApprove) primary.push(btn('contact-approve','Aprovar e reservar','check','primary',key));
+    if (contact.canDeliver) (contact.status === 'approved' ? primary : extra).push(btn('contact-return','Registrar entrega','check','secondary',key));
+    if (contact.canReview) primary.push(btn('contact-reject','Recusar pedido','x','quiet',key));
+    if (contact.canRevoke) extra.push(btn('contact-reject','Revogar aprovação','x','quiet',key));
+    if (!received && ['pending','approved'].includes(contact.status)) extra.push(btn('contact-cancel','Cancelar pedido','','quiet',key));
+    if (contact.pickup?.proposal) extra.push(btn('pickup-dismiss',contact.pickup.proposal.by === (received ? 'custodian' : 'requester') ? 'Retirar sugestão' : 'Recusar sugestão','','quiet',key));
+    if (contact.pickup?.agreed) extra.push(btn('pickup-unschedule','Desmarcar retirada','','quiet',key));
+    if (contact.phone) extra.push(`<a class="button secondary whatsapp" href="https://wa.me/${e(contact.phone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}Abrir WhatsApp</a>`);
+    if (contact.canViewReceipt) primary.push(link(receiptHref(contact.itemId),'Ver comprovante',{symbol:'list'}));
+    return `<article class="contact-card panel"><div class="contact-top"><span>${received ? 'Pedido recebido' : 'Meu pedido'} · ${niceDate(contact.createdAt)}</span>${badge(contact.status)}</div>
+      <h3>${contact.canViewItem ? link(itemHref(contact.itemId),e(contact.title),{cls:'record-title'}) : e(contact.title)}</h3>
+      <p class="contact-by">${e(received ? contact.requesterName : custodyText[contact.custody])}</p>
+      ${contact.status === 'pending' ? `<div class="claim-proof"><small>${received ? 'Como a pessoa identificou o objeto' : 'Detalhe que você informou'}</small><p>${e(contact.message)}</p></div>` :
+        `<details class="claim-disclosure"><summary>Detalhe de identificação</summary><p>${e(contact.message)}</p></details>`}
+      ${contact.sector && (contact.sector.location || contact.sector.hours) ? `<p class="sector-note">${icon('building')}${e([contact.sector.location,contact.sector.hours].filter(Boolean).join(' · '))}</p>` : ''}
+      ${contact.pickup ? pickupPanel(contact) : ''}
+      ${primary.length ? `<div class="record-actions">${primary.join('')}</div>` : ''}
+      ${extra.length ? `<details class="contact-options"><summary>Outras opções</summary><div class="record-actions">${extra.join('')}</div></details>` : ''}
+    </article>`;
   }).join('')}</div>`;
 }
 
 function bindContactActions(contacts) {
+  const find = button => contacts.find(row => row.id === button.dataset.id);
+  const refresh = () => go(location.pathname + location.search,{keepScroll:true});
   actions['contact-return'] = button => {
-    const contact = contacts.find(row => row.id === button.dataset.id);
-    returnDialog({ id:contact.itemId, title:contact.title, recipientName:contact.requesterName }, contact);
+    const contact = find(button);
+    returnDialog({id:contact.itemId,title:contact.title,updatedAt:contact.itemUpdatedAt,occurredOn:contact.occurredOn},contact);
   };
-  for (const [name,verb,description] of [
-    ['approve','Aprovar identificação','O objeto ficará reservado e o contato será liberado para combinar a entrega.'],
-    ['reject','Recusar solicitação','O pedido será encerrado. A pessoa pode enviar outro com mais detalhes.'],
-    ['cancel','Cancelar solicitação','O pedido será retirado e a reserva será liberada, caso já tenha sido feita.']
+  const changePickup = async (contact,action,fields = {}) => {
+    try {
+      await api(`/contacts/${contact.id}/pickup`,{method:'POST',body:{action,revision:contact.pickup.revision,custody:contact.custody,...fields}});
+    } catch (error) {
+      if (error.status === 409) { refresh(); notify(error.message); return; }
+      throw error;
+    }
+    notify({propose:'Sugestão enviada.',confirm:'Retirada confirmada.',dismiss:'Sugestão retirada.',unschedule:'Horário desmarcado.'}[action]);
+    refresh();
+  };
+  actions['pickup-propose'] = button => {
+    const contact = find(button);
+    const before = contact.pickup.proposal || contact.pickup.agreed;
+    const now = today() + 'T' + pickupClock.format(new Date());
+    modal('Combinar retirada',`<p>${e(contact.title)}</p><form class="stack" id="pickup-form">
+      ${input('Ponto de encontro','place',before?.place || contact.sector?.location || '','required minlength="2" maxlength="120" placeholder="Ex.: entrada da biblioteca"')}
+      ${input('Dia e horário','when',before?.when > now ? before.when : '',`type="datetime-local" required min="${now}"`)}
+      <p class="hint">Horário de Brasília. A outra pessoa vai confirmar a sugestão.</p>
+      <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Enviar sugestão')}</div></form>`);
+    onForm('#pickup-form',data => changePickup(contact,'propose',data));
+  };
+  for (const [action,title,body,label] of [
+    ['confirm','Confirmar a retirada?','','Confirmar horário'],
+    ['dismiss','Retirar esta sugestão?','O horário sugerido será retirado. A reserva fica ativa.','Retirar sugestão'],
+    ['unschedule','Desmarcar a retirada?','O dia e o horário serão retirados. O objeto continua reservado para vocês combinarem outro encontro.','Desmarcar horário']
   ]) {
-    actions[`contact-${name}`] = button => confirmAction(verb,description,async () => {
-      await api(`/contacts/${button.dataset.id}`,{ method:'PATCH',body:{ action:name } });
-      notify('Solicitação atualizada.');
-      go(location.pathname + location.search);
-    },verb);
+    actions['pickup-' + action] = button => {
+      const contact = find(button);
+      const meeting = contact.pickup.proposal;
+      confirmAction(title,action === 'confirm' ? `${meetingTime(meeting.when)} · ${meeting.place}` : body,() => changePickup(contact,action),label);
+    };
+  }
+  for (const [name,verb,description] of [
+    ['approve','Aprovar identificação','O objeto ficará reservado. Vocês poderão combinar a retirada pelo sistema.'],
+    ['reject','Recusar solicitação','O pedido será encerrado. A pessoa poderá enviar outro com mais detalhes.'],
+    ['cancel','Cancelar solicitação','O pedido será retirado e uma eventual reserva será liberada.']
+  ]) {
+    actions['contact-' + name] = button => {
+      const contact = find(button);
+      const title = name === 'reject' && contact.status === 'approved' ? 'Revogar aprovação' : verb;
+      confirmAction(title,description,async () => {
+        await api(`/contacts/${contact.id}`,{method:'PATCH',body:{action:name}});
+        notify(name === 'approve' ? 'Objeto reservado.' : 'Solicitação atualizada.');
+        if (name === 'approve') go(withQuery(contact.custody === 'campus' ? '/painel/solicitacoes' : contactsPage,'item',contact.itemId));
+        else refresh();
+      },title);
+    };
   }
 }
 
 function returnDialog(item, contact = null, candidates = []) {
   const linked = contact || item.reservedLostId || item.reservedContactId;
-  modal('Registrar devolução', `<p>Confirme a entrega de “${e(item.title)}”.</p><form class="stack" id="return-form">
+  modal('Registrar devolução', `<p>Registre a entrega de “${e(item.title)}” depois que a pessoa receber o objeto.</p><form class="stack" id="return-form">
     ${linked ? `<div class="notice">${icon('user')}${e(contact?.requesterName || item.reservationName || 'Devolução vinculada à reserva')}</div>` :
       `${candidates.length ? select('Vincular perda (opcional)','lostId',[['','Entrega sem vínculo'],...candidates.map(row => [row.id,`${row.title} · ${row.name}`])],'') : ''}
        ${input('Quem recebeu','recipientName',item.reservationName || '', 'maxlength="90" placeholder="Nome da pessoa que recebeu"')}`}
@@ -832,13 +912,34 @@ function returnDialog(item, contact = null, candidates = []) {
     ${textarea('Observações (opcional)','notes','','maxlength="700" rows="3"')}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Confirmar devolução','check')}</div></form>`);
   onForm('#return-form', async data => {
-    await api(`/items/${item.id}/return`,{ method:'POST',body:{ ...data,contactId:contact?.id } });
-    notify('Devolução registrada.');
-    go(location.pathname + location.search);
+    await api(`/items/${item.id}/return`,{ method:'POST',body:{ ...data,updatedAt:item.updatedAt,
+      contactId:contact?.id || item.reservedContactId || undefined,lostId:data.lostId || item.reservedLostId || undefined } });
+    notify('Entrega registrada.');
+    go(receiptHref(item.id));
   });
 }
 
 actions['rate-record'] = button => rate(button.dataset.id);
+async function receiptPage(itemId,token) {
+  if (!needUser(receiptHref(itemId))) return;
+  const {receipt} = await api(`/items/${itemId}/receipt`);
+  if (token !== navigation) return;
+  document.title = 'Comprovante de devolução · ' + receipt.title;
+  const timestamp = new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(receipt.recordedAt));
+  const field = (label,value) => `<div><dt>${label}</dt><dd>${e(value)}</dd></div>`;
+  site.innerHTML = shell(`<div class="receipt-page"><div class="receipt-controls">
+    ${link('/meus-registros?aba=devolucoes','Minhas devoluções',{cls:'text-link',symbol:'back'})}
+    ${btn('print-receipt','Imprimir ou salvar em PDF','download','secondary')}</div>
+    <article class="receipt-sheet"><header><div class="receipt-brand">${icon('tag')}<span>${siteName}${session.campus ? ' · ' + e(session.campus) : ''}</span></div>
+      <h1>Comprovante de devolução</h1></header>
+    <div class="receipt-object"><span>Objeto entregue</span><h2>${e(receipt.title)}</h2><p>${e(receipt.category)}</p></div>
+    <dl class="receipt-facts">${field('Data da entrega',niceDate(receipt.returnedOn))}${field('Recebido por',receipt.recipientName)}
+      ${field('Registrado por',receipt.recordedBy)}${field('Guarda na entrega',custodyText[receipt.custody])}</dl>
+    <footer><p>Registro de ${e(timestamp)} · Horário de Brasília</p><span>Identificador</span><code>${e(receipt.id)}</code></footer></article>
+    ${link(itemHref(itemId),'Abrir ficha do objeto',{cls:'text-link receipt-item',symbol:'arrow'})}</div>`);
+}
+actions['print-receipt'] = () => window.print();
+
 function rate(id) {
   modal('Avaliar devolução', `<p>Como foi o processo de entrega?</p><form class="stack" id="rating-form">
     <fieldset class="stars"><legend>Sua nota</legend>${[1,2,3,4,5].map(score => `<label><input type="radio" name="score" value="${score}" required>
@@ -919,7 +1020,8 @@ function helpPage() {
     <div class="help-layout"><section class="panel editor">
     <div class="help-step"><span class="choice-icon">${icon('search')}</span><div><h2>Procure o objeto</h2><p>Explore os encontrados por categoria, data, local ou palavra-chave. Se ainda não o encontrou, registre a perda e acompanhe possíveis correspondências.</p></div></div>
     <div class="help-step"><span class="choice-icon">${icon('camera')}</span><div><h2>Registre um objeto encontrado</h2><p>Adicione uma foto, descreva o objeto e informe onde ele foi encontrado e quem está com ele.</p></div></div>
-    <div class="help-step"><span class="choice-icon">${icon('check')}</span><div><h2>Combine a retirada</h2><p>Envie uma solicitação com um detalhe do objeto. Depois que o responsável confirmar a identificação, acompanhe a retirada em Meus registros.</p></div></div></section>
+    <div class="help-step"><span class="choice-icon">${icon('check')}</span><div><h2>Combine a retirada</h2><p>Abra a ficha e descreva um detalhe que identifica seu objeto. Quando o pedido for aprovado, abra Solicitações em Meus registros para sugerir ou confirmar local, dia e horário.</p></div></div>
+    <div class="help-step"><span class="choice-icon">${icon('list')}</span><div><h2>Consulte o comprovante</h2><p>Quem está com o objeto registra a entrega. Se você recebeu pelo seu pedido ou registrou a devolução, poderá abrir e imprimir o comprovante em Meus registros, na aba Devoluções.</p></div></div></section>
     <aside class="panel side-note"><span class="choice-icon">${icon('building')}</span><h2>Setor de Achados e Perdidos</h2>
       ${session.sector.location ? `<p>${e(session.sector.location)}</p>` : ''}${session.sector.hours ? `<p>${e(session.sector.hours)}</p>` : ''}
       ${link('/novo','Registrar item',{ cls:'button primary',symbol:'plus' })}</aside></div>`);
@@ -951,12 +1053,13 @@ async function adminPage(url, token) {
   if (path === '/painel/usuarios') return usersPage(url,token);
   if (path === '/painel/solicitacoes') {
     const query = new URLSearchParams({ scope:'campus',page:url.searchParams.get('page') || '1' });
-    if (url.searchParams.get('fila') === 'responder') query.set('fila','responder');
+    if (['responder','entregar'].includes(url.searchParams.get('fila'))) query.set('fila',url.searchParams.get('fila'));
+    if (url.searchParams.has('item')) query.set('item',url.searchParams.get('item'));
     const data = await api(`/contacts?${query}`);
     const { contacts } = data;
     if (token !== navigation) return;
-    site.innerHTML = adminShell(`${header(query.has('fila') ? 'Pedidos para responder' : 'Solicitações','Revise os pedidos para objetos guardados no setor.',
-      query.has('fila') ? link(path,'Todas as solicitações') : '')}${contactCards(contacts)}${pager(path + url.search,data)}`,path);
+    site.innerHTML = adminShell(`${header(({responder:'Pedidos para responder',entregar:'Objetos para entregar'})[query.get('fila')] || 'Solicitações','Revise os pedidos para objetos guardados no setor.',
+      query.has('fila') || query.has('item') ? link(path,'Todas as solicitações') : '')}${contactCards(contacts,query.get('fila'))}${pager(path + url.search,data)}`,path);
     bindContactActions(contacts);
     return;
   }
@@ -1006,6 +1109,7 @@ async function itemManagement(url,token) {
   const row = item => {
     const controls = [];
     const key = `data-id="${item.id}"`;
+    if (item.canViewReceipt) controls.push(link(receiptHref(item.id),'Comprovante',{cls:'button quiet',symbol:'list'}));
     if (archived) controls.push(btn('admin-restore','Restaurar','archive','quiet',key));
     else {
       if (!historyMode) {
@@ -1073,7 +1177,7 @@ function bindAdminItems(items) {
     ['archive','Arquivar registro','O registro sairá da listagem ativa e solicitações pendentes serão encerradas.'],
     ['restore','Restaurar registro','O registro voltará para a listagem ativa.'],
     ['reopen','Liberar reserva','O objeto ficará em aberto e a solicitação aprovada voltará para análise.'],
-    ['receive','Receber no setor','Confirme que o objeto foi entregue ao setor de Achados e Perdidos.']
+    ['receive','Receber no setor','Confirme que o setor recebeu o objeto. Se já havia um horário de retirada, a equipe precisará combinar um novo encontro.']
   ]) {
     actions[`admin-${action}`] = button => confirmAction(title,text,() => update(itemFor(button),action),title);
   }
@@ -1181,6 +1285,7 @@ async function render() {
     if (path === '/') return await home(url,token);
     if (path === '/novo') return newChoice();
     if (path === '/novo/found' || path === '/novo/lost') return itemForm(path.slice(6),url);
+    if (path.startsWith('/comprovante/')) return await receiptPage(encodeURIComponent(path.slice(13)),token);
     if (path.startsWith('/item/')) return await detail(encodeURIComponent(path.slice(6)),token);
     if (path === '/meus-registros') return await records(url,token);
     if (path === '/perfil') return profilePage(url);

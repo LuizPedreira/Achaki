@@ -67,7 +67,7 @@ test('guarda direta: foto, busca, privacidade, identificação, devolução atô
   const [claimCode, claim] = await owner('/api/items/' + item + '/contact',{ message:'Há uma fita azul no lado direito do estojo.' });
   assert.equal(claimCode,201,JSON.stringify(claim));
   assert.equal((await visitor('/api/contacts/summary'))[0],401);
-  assert.deepEqual((await finder('/api/contacts/summary'))[1],{ review:1,pickup:0,campus:0 });
+  assert.deepEqual((await finder('/api/contacts/summary'))[1],{ review:1,pickup:0,campus:0,handoff:0 });
   assert.deepEqual((await finder('/api/contacts?fila=responder'))[1].contacts.map(row => row.id),[claim.contact.id]);
   assert.equal((await owner('/api/contacts?fila=responder'))[1].total,0);
   assert.equal((await visitor('/api/items/' + claim.contact.lostId))[0],404);
@@ -133,14 +133,14 @@ test('setor: moderação, perda vinculada, devolução administrativa, históric
   const recategorization = { ...lossData.item,categoryId:'acessorios' };
   assert.equal((await staff('/api/admin/items/' + lost,recategorization,{ method:'PATCH' }))[0],409);
   const contact = (await owner('/api/items/' + item + '/contact',{ lostId:lost,message:'O estojo tem uma marca azul e um risco.' }))[1].contact;
-  assert.deepEqual((await staff('/api/contacts/summary'))[1],{ review:0,pickup:0,campus:1 });
+  assert.deepEqual((await staff('/api/contacts/summary'))[1],{ review:0,pickup:0,campus:1,handoff:0 });
   assert.equal((await finder('/api/contacts/summary'))[1].campus,0);
   assert.equal((await staff('/api/contacts?scope=campus&fila=responder'))[1].total,1);
   assert.equal((await finder('/api/contacts?scope=campus&fila=responder'))[1].total,0);
   assert.equal((await finder('/api/contacts/' + contact.id,{ action:'approve' },{ method:'PATCH' }))[0],403);
   assert.equal((await staff('/api/contacts?scope=campus'))[1].contacts[0].id,contact.id);
   assert.equal((await staff('/api/contacts/' + contact.id,{ action:'approve' },{ method:'PATCH' }))[0],200);
-  assert.deepEqual((await owner('/api/contacts/summary'))[1],{ review:0,pickup:1,campus:0 });
+  assert.deepEqual((await owner('/api/contacts/summary'))[1],{ review:0,pickup:1,campus:0,handoff:0 });
   assert.deepEqual((await owner('/api/contacts?fila=retirar'))[1].contacts.map(row => row.id),[contact.id]);
   assert.equal((await staff('/api/contacts/summary'))[1].campus,0);
   assert.equal((await owner('/api/contacts'))[1].contacts[0].sector.location,'Secretaria');
@@ -447,4 +447,160 @@ test('um pedido ativo impede encerrar a perda, e um novo pedido preserva o regis
   assert.notEqual(again.contact.lostId,loss.id);
   assert.equal((await owner('/api/items/' + loss.id))[1].item.status,'recovered');
   assert.equal((await owner('/api/contacts?lost=' + loss.id))[1].contacts.every(row => row.status === 'cancelled'),true);
+});
+
+async function pickupFixture(t,custody = 'finder') {
+  const local = app();
+  t.after(local.close);
+  const owner = local.client(), finder = local.client(), staff = local.client(), visitor = local.client();
+  await Promise.all([[owner,'Lucas Martins','lucas'],[finder,'Ana Barbosa','ana'],[staff,'Equipe do Setor','setor']].map(
+    ([call,name,email]) => call('/api/auth/register',account(name,email + '@example.test'))));
+  assert.equal((await staff('/api/bootstrap/admin',{},{headers:{Authorization:'Bearer ' + local.bootstrapToken}}))[0],200);
+  const photoId = (await finder('/api/media',photo,{binary:true}))[1].id;
+  const {item} = (await finder('/api/items',object('Fone azul, com estojo',{photos:[photoId],custody})))[1];
+  const {contact} = (await owner('/api/items/' + item.id + '/contact',{message:'Tem uma letra L na haste direita.'}))[1];
+  const change = '/api/contacts/' + contact.id;
+  const current = async call => (await call('/api/contacts?fila=entregar'))[1].contacts[0];
+  return {owner,finder,staff,visitor,item,contact,change,current,plan:change + '/pickup',calendar:change + '/calendar.ics',
+    delivery:'/api/items/' + item.id + '/return',receipt:'/api/items/' + item.id + '/receipt'};
+}
+
+function futureMeeting(days = 2) {
+  const day = new Date(Date.parse(today() + 'T12:00:00Z') + days * 86400000).toISOString().slice(0,10);
+  return {when:day + 'T14:30',place:'Biblioteca, balcão de atendimento'};
+}
+
+test('as duas partes combinam uma retirada, exportam o calendário e preservam o horário aceito ao renegociar', async t => {
+  const {owner,finder,staff,visitor,change,plan,calendar,current} = await pickupFixture(t);
+  const next = futureMeeting();
+  const offer = {action:'propose',revision:0,custody:'finder',...next};
+  const op = (action,revision) => ({action,revision,custody:'finder'});
+  const getCalendar = call => call(calendar,undefined,{raw:true});
+  assert.equal((await visitor(plan,offer))[0],401);
+  assert.equal((await staff(plan,offer))[0],404);
+  assert.equal((await owner(plan,offer))[0],409);
+  assert.equal((await finder(change,{action:'approve'},{method:'PATCH'}))[0],200);
+  assert.equal((await finder('/api/contacts/summary'))[1].handoff,1);
+  offer.revision = (await current(finder)).pickup.revision;
+  assert.equal((await owner('/api/contacts?fila=entregar'))[1].total,0);
+  assert.equal((await owner(plan,{...offer,when:'2026-02-30T14:30'}))[0],400);
+  assert.equal((await owner(plan,{...offer,when:'2020-01-01T14:30'}))[0],400);
+  const [offered,{pickup:first}] = await owner(plan,offer);
+  assert.equal(offered,200);
+  assert.deepEqual(first.proposal,{...next,by:'requester'});
+  assert.deepEqual((await owner(plan,offer))[1].pickup,first);
+  assert.equal((await getCalendar(owner))[0],404);
+  assert.equal((await owner(plan,op('confirm',first.revision)))[0],403);
+  const approve = op('confirm',first.revision);
+  const [[firstCode,{pickup:agreed}],[retryCode,retry]] = await Promise.all([finder(plan,approve),finder(plan,approve)]);
+  assert.deepEqual([firstCode,retryCode],[200,200]);
+  assert.deepEqual(retry.pickup,agreed);
+  assert.deepEqual(agreed.agreed,next);
+  assert.equal(agreed.proposal,null);
+  assert.deepEqual((await owner('/api/contacts?fila=retirar'))[1].contacts[0].pickup,agreed);
+  const [code,attachment] = await getCalendar(owner);
+  assert.equal(code,200);
+  assert.match(attachment.headers.get('Content-Type'),/text\/calendar/);
+  assert.match(attachment.headers.get('Cache-Control'),/no-store/);
+  const ics = await attachment.text();
+  assert.ok(ics.includes('DTSTART:' + next.when.slice(0,10).replaceAll('-','') + 'T173000Z'));
+  assert.ok(ics.includes('LOCATION:Biblioteca\\, balcão'));
+  assert.equal((await getCalendar(staff))[0],404);
+  const alternate = futureMeeting(4);
+  const proposed = (await finder(plan,{...op('propose',agreed.revision),...alternate}))[1].pickup;
+  assert.deepEqual(proposed.agreed,next);
+  assert.equal(proposed.proposal.by,'custodian');
+  assert.equal((await owner(plan,op('confirm',agreed.revision)))[0],409);
+  const kept = (await owner(plan,op('dismiss',proposed.revision)))[1].pickup;
+  assert.deepEqual(kept.agreed,next);
+  assert.equal(kept.proposal,null);
+  const cleared = (await owner(plan,op('unschedule',kept.revision)))[1].pickup;
+  assert.equal(cleared.agreed,null);
+  assert.equal((await getCalendar(owner))[0],404);
+  assert.equal((await finder('/api/contacts?fila=entregar'))[1].total,1);
+});
+
+test('sugestões simultâneas, transferência ao setor e cancelamento respeitam a reserva vigente', async t => {
+  const {owner,finder,staff,item,change,plan,calendar,current} = await pickupFixture(t);
+  await finder(change,{action:'approve'},{method:'PATCH'});
+  const offer = {action:'propose',custody:'finder',revision:(await current(finder)).pickup.revision,...futureMeeting()};
+  const simultaneous = await Promise.all([owner(plan,offer),finder(plan,{...offer,place:'Secretaria'})]);
+  assert.deepEqual(simultaneous.map(([status])=>status).sort(),[200,409]);
+  const {pickup:before} = simultaneous.find(([code])=>code===200)[1];
+  assert.equal((await finder('/api/items/' + item.id + '/transfer',{}))[0],200);
+  assert.equal((await finder(plan,offer))[0],404);
+  assert.equal((await owner(plan,{...offer,revision:before.revision}))[0],409);
+  const after = (await current(staff)).pickup;
+  assert.equal(after.proposal,null);
+  const proposal = (await staff(plan,{...offer,custody:'campus',revision:after.revision}))[1].pickup;
+  assert.equal((await owner(plan,{action:'confirm',custody:'campus',revision:proposal.revision}))[0],200);
+  assert.equal((await staff(calendar,undefined,{raw:true}))[0],200);
+  assert.equal((await owner(change,{action:'cancel'},{method:'PATCH'}))[0],200);
+  assert.equal((await staff(calendar,undefined,{raw:true}))[0],404);
+  assert.equal((await staff(plan,{...offer,custody:'campus'}))[0],409);
+  assert.equal((await staff('/api/contacts/summary'))[1].handoff,0);
+});
+
+test('reabrir e aprovar o mesmo pedido exige um novo combinado e invalida o formulário antigo de entrega', async t => {
+  const {owner,finder,staff,item,contact,change,plan,calendar,delivery,current} = await pickupFixture(t);
+  const approve = () => finder(change,{action:'approve'},{method:'PATCH'});
+  await approve();
+  const first = await current(finder);
+  const offer = {action:'propose',custody:'finder',revision:first.pickup.revision,...futureMeeting()};
+  const {pickup:proposal} = (await finder(plan,offer))[1];
+  const {pickup:agreed} = (await owner(plan,{action:'confirm',custody:'finder',revision:proposal.revision}))[1];
+  assert.ok(agreed.agreed);
+  assert.equal((await staff('/api/admin/items/' + item.id + '/action',{action:'reopen'}))[0],200);
+  assert.equal((await approve())[0],200);
+  const second = await current(finder);
+  assert.equal(second.pickup.agreed,null);
+  assert.equal(second.pickup.proposal,null);
+  assert.equal((await owner(calendar,undefined,{raw:true}))[0],404);
+  assert.equal((await owner(plan,{...offer,revision:agreed.revision}))[0],409);
+  const before = {updatedAt:first.itemUpdatedAt,contactId:contact.id,returnedOn:today()};
+  assert.equal((await finder(delivery,before))[0],409);
+  assert.equal((await owner('/api/returns'))[1].total,0);
+  const fresh = {...before,updatedAt:second.itemUpdatedAt};
+  assert.equal((await finder(delivery,fresh))[0],201);
+  assert.equal((await finder(delivery,fresh))[0],200);
+});
+
+test('o comprovante privado identifica a entrega e continua disponível depois do arquivamento', async t => {
+  const {owner,finder,staff,visitor,item,contact,change,delivery,receipt} = await pickupFixture(t,'campus');
+  assert.equal((await visitor(receipt))[0],401);
+  assert.equal((await owner(receipt))[0],404);
+  await staff(change,{action:'approve'},{method:'PATCH'});
+  assert.equal((await staff('/api/contacts/summary'))[1].handoff,1);
+  const data = {returnedOn:today(),contactId:contact.id,notes:'Anotação interna do setor.'};
+  const [created,delivered] = await staff(delivery,data);
+  assert.equal(created,201);
+  assert.equal((await staff(delivery,data))[1].returnId,delivered.returnId);
+  assert.equal((await staff(delivery,{...data,contactId:crypto.randomUUID()}))[0],409);
+  const [code,{receipt:record}] = await owner(receipt);
+  assert.equal(code,200);
+  assert.equal(record.id,delivered.returnId);
+  assert.equal(record.recipientName,'Lucas Martins');
+  assert.equal(record.recordedBy,'Equipe do Setor');
+  assert.equal(record.custody,'campus');
+  assert.equal(record.notes,undefined);
+  assert.equal((await finder(receipt))[0],404);
+  assert.equal((await finder('/api/mine?kind=found'))[1].items[0].recipientName,null);
+  assert.equal((await visitor('/api/items/' + item.id))[1].item.canViewReceipt,false);
+  assert.equal((await owner('/api/contacts'))[1].contacts[0].canViewReceipt,true);
+  const recipient = (await owner('/api/returns?page=1'))[1];
+  assert.equal(recipient.total,1);
+  assert.equal(recipient.items[0].role,'recipient');
+  assert.equal(recipient.items[0].canRate,true);
+  assert.equal((await staff('/api/returns?page=1'))[1].items[0].role,'actor');
+  const original = (await finder('/api/returns?page=1'))[1].items[0];
+  assert.equal(original.role,'finder');
+  assert.equal(original.canViewReceipt,false);
+  assert.equal(original.canRate,true);
+  assert.equal((await staff('/api/admin/items/' + item.id + '/action',{action:'archive'}))[0],200);
+  assert.equal((await owner(receipt))[1].receipt.id,delivered.returnId);
+  assert.equal((await staff(receipt))[0],200);
+  assert.equal((await owner('/api/returns?page=2'))[1].items.length,0);
+  const path = '/comprovante/' + item.id;
+  assert.equal(safePath(path),path);
+  assert.equal((await visitor(path,undefined,{raw:true}))[0],200);
 });

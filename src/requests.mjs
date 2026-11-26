@@ -1,6 +1,7 @@
 import { HttpError, all, choice, date, db, digest, first, id, json, pageOf, plain,
-  requireUser, run, stamp, throttle } from './http.mjs';
-import { loadItem, manages } from './items.mjs';
+  requireUser, run, throttle } from './http.mjs';
+import { canViewReceipt, loadItem, manages, nextUpdate } from './items.mjs';
+import { eligiblePickup, pickupAudit, pickupColumns, pickupJoin, pickupView } from './pickups.mjs';
 
 export async function requestContact(env, user, itemId, input) {
   requireUser(user);
@@ -53,24 +54,35 @@ const liveContact = "i.archived_at IS NULL AND i.status IN ('open','reserved')";
 const awaitingReview = `c.status = 'pending' AND ${liveContact} AND c.requester_id <> ?`;
 const awaitingPickup = `c.status = 'approved' AND ${liveContact} AND c.requester_id = ?`;
 
+const handover = `${eligiblePickup} AND c.requester_id <> ? AND
+  ((i.custody = 'finder' AND i.author_id = ?) OR (i.custody = 'campus' AND ? = 'admin'))`;
+
 export async function contactSummary(env, user) {
   requireUser(user);
   const joined = 'FROM contacts c JOIN items i ON i.id = c.item_id';
   const counts = await first(env, `SELECT
     (SELECT count(*) ${joined} WHERE ${awaitingReview} AND i.custody = 'finder' AND i.author_id = ?) AS review,
     (SELECT count(*) ${joined} WHERE ${awaitingPickup}) AS pickup,
+    (SELECT count(*) ${joined} WHERE ${handover}) AS handoff,
     CASE WHEN ? = 'admin' THEN (SELECT count(*) ${joined} WHERE ${awaitingReview} AND i.custody = 'campus') ELSE 0 END AS campus`,
-    user.id,user.id,user.id,user.role,user.id);
+    user.id,user.id,user.id,user.id,user.id,user.role,user.role,user.id);
   return json(counts);
 }
 
 export async function inbox(env, user, search) {
   requireUser(user);
   const staff = search.get('scope') === 'campus' && user.role === 'admin';
-  const filters = [staff ? "i.custody = 'campus'" : "(c.requester_id = ? OR (i.custody = 'finder' AND i.author_id = ?))"];
-  const args = staff ? [] : [user.id,user.id];
-  if (search.has('fila')) {
-    const queue = choice(search.get('fila'), ['responder','retirar'], 'uma fila disponível');
+  const queue = search.has('fila') ? choice(search.get('fila'),['responder','retirar','entregar'],'uma fila disponível') : '';
+  const filters = [], args = [];
+  if (queue === 'entregar') {
+    filters.push(handover);
+    args.push(user.id,user.id,user.role);
+  } else if (!staff) {
+    filters.push("(c.requester_id = ? OR (i.custody = 'finder' AND i.author_id = ?))");
+    args.push(user.id,user.id);
+  }
+  if (staff) filters.push("i.custody = 'campus'");
+  if (queue === 'responder' || queue === 'retirar') {
     filters.push(queue === 'responder' ? awaitingReview : awaitingPickup);
     args.push(user.id);
   }
@@ -83,10 +95,12 @@ export async function inbox(env, user, search) {
   const { page,offset,limit } = pageOf(search);
   const [records,count] = await env.DB.batch([
     db(env, `SELECT c.*, i.title, i.custody, i.author_id, i.reserved_contact_id, i.reserved_lost_id, i.status AS item_status,
-    i.archived_at, i.publication, requester.name AS requester_name, requester.phone AS requester_phone,
-    author.phone AS author_phone, s.sector_phone, s.sector_location, s.sector_hours
+    i.archived_at, i.publication, i.updated_at AS item_updated_at, i.occurred_on, requester.name AS requester_name, requester.phone AS requester_phone,
+    author.phone AS author_phone, s.sector_phone, s.sector_location, s.sector_hours,
+    (${eligiblePickup}) AS can_plan, ${pickupColumns}, r.id AS return_id,r.actor_id AS return_actor_id,r.recipient_id
     FROM contacts c JOIN items i ON i.id = c.item_id JOIN users requester ON requester.id = c.requester_id
-    JOIN users author ON author.id = i.author_id CROSS JOIN settings s WHERE s.id = 1 AND ${filter}
+    JOIN users author ON author.id = i.author_id LEFT JOIN returns r ON r.item_id = i.id
+    ${pickupJoin} CROSS JOIN settings s WHERE s.id = 1 AND ${filter}
     ORDER BY CASE c.status WHEN 'approved' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, c.updated_at DESC,c.id LIMIT ? OFFSET ?`, ...args,limit,offset),
     db(env, `SELECT count(*) AS total FROM contacts c JOIN items i ON i.id = c.item_id WHERE ${filter}`,...args)
   ]);
@@ -97,6 +111,8 @@ export async function inbox(env, user, search) {
     const available = (!row.reserved_contact_id || row.reserved_contact_id === row.id) && (!row.reserved_lost_id || row.reserved_lost_id === row.lost_id);
     return {
       id: row.id, itemId: row.item_id, title: row.title, status: row.status, side, custody: row.custody,
+      itemUpdatedAt:row.item_updated_at, occurredOn:row.occurred_on,
+      pickup:row.can_plan ? pickupView(row) : null, canViewReceipt:row.status === 'delivered' && canViewReceipt(row,user),
       canViewItem: user.role === 'admin' || row.status === 'delivered' ||
         (!row.archived_at && (row.publication === 'public' || row.author_id === user.id)),
       requesterName: side === 'received' ? row.requester_name : null,
@@ -117,8 +133,8 @@ export async function reviewContact(env, user, contactId, input) {
   const item = await loadItem(env, contact.item_id);
   if (!item || item.archived_at || item.status === 'returned') throw new HttpError(409, 'O item já foi encerrado.');
   const action = choice(input.action, ['approve','reject','cancel'], 'uma ação');
-  if (action === 'cancel' ? contact.requester_id !== user.id : !manages(item,user)) throw new HttpError(403, 'Você não tem acesso a esta solicitação.');
-  const time = stamp();
+  if (action === 'cancel' ? contact.requester_id !== user.id : contact.requester_id === user.id || !manages(item,user)) throw new HttpError(403, 'Você não tem acesso a esta solicitação.');
+  const time = nextUpdate(item);
   const version = item.updated_at;
   const reviewer = "EXISTS (SELECT 1 FROM users a WHERE a.id = ? AND a.active = 1 AND ((i.custody = 'campus' AND a.role = 'admin') OR (i.custody = 'finder' AND i.author_id = a.id)))";
   const lostAvailable = "EXISTS (SELECT 1 FROM items l WHERE l.id = contacts.lost_id AND l.kind = 'lost' AND l.status = 'open' AND l.archived_at IS NULL)";
@@ -157,12 +173,26 @@ export async function reviewContact(env, user, contactId, input) {
   return json({});
 }
 
+async function recordedReturn(env,itemId,input) {
+  const row = await first(env,'SELECT id,contact_id,lost_id,recipient_name,returned_on,notes FROM returns WHERE item_id = ?',itemId);
+  if (!row) throw new HttpError(409,'A reserva mudou. Abra o pedido novamente para conferir quem vai receber o objeto.');
+  if ((input.contactId && input.contactId !== row.contact_id) || (input.lostId && input.lostId !== row.lost_id) ||
+      (input.returnedOn && input.returnedOn !== row.returned_on) || (input.notes !== undefined && plain(input.notes,'as observações',0,700) !== row.notes) ||
+      (!input.contactId && !input.lostId && input.recipientName && plain(input.recipientName,'o nome de quem recebeu',2,90) !== row.recipient_name)) {
+    throw new HttpError(409,'Já existe uma devolução com outros dados. Consulte o comprovante do objeto.');
+  }
+  return json({returnId:row.id});
+}
+
 export async function returnItem(env, user, itemId, input) {
   requireUser(user);
   const item = await loadItem(env, itemId);
   if (!item || item.kind !== 'found' || item.archived_at) throw new HttpError(404, 'Item não encontrado.');
   if (!manages(item, user)) throw new HttpError(403, 'A devolução precisa ser registrada por quem está com o objeto.');
-  if (item.status === 'returned') return json({ returnId: item.return_id });
+  if (item.status === 'returned') return recordedReturn(env,item.id,input);
+  if (input.updatedAt !== undefined && input.updatedAt !== item.updated_at) {
+    throw new HttpError(409,'Os dados do objeto mudaram. Abra o pedido novamente para conferir a entrega.');
+  }
   const inputContact = input.contactId ? id(input.contactId) : null;
   const inputLost = input.lostId ? id(input.lostId) : null;
   const contactId = inputContact || item.reserved_contact_id;
@@ -193,14 +223,13 @@ export async function returnItem(env, user, itemId, input) {
   const notes = plain(input.notes,'as observações',0,700);
   const returnId = crypto.randomUUID();
   try {
-    await run(env, `INSERT INTO returns(id,item_id,actor_id,recipient_id,recipient_name,lost_id,contact_id,returned_on,notes,custody)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`, returnId, item.id, user.id, recipientId, recipientName, lostId, contactId, returnedOn, notes, item.custody);
+    const result = await run(env, `INSERT INTO returns(id,item_id,actor_id,recipient_id,recipient_name,lost_id,contact_id,returned_on,notes,custody)
+      SELECT ?,id,?,?,?,?,?,?,?,custody FROM items WHERE id = ? AND updated_at = ?`,
+      returnId,user.id,recipientId,recipientName,lostId,contactId,returnedOn,notes,item.id,item.updated_at);
+    if (!result.meta.changes) return recordedReturn(env,item.id,input);
   } catch (error) {
-    if (/return_item_unavailable|unique/i.test(error.message)) {
-      const recorded = await first(env, 'SELECT id FROM returns WHERE item_id = ?', item.id);
-      if (recorded) return json({ returnId: recorded.id });
-    }
-    if (/return_.*unavailable|unique/i.test(error.message)) throw new HttpError(409, 'O item, a reserva ou a solicitação mudou. Atualize a página.');
+    if (/return_item_unavailable|unique/i.test(error.message)) return recordedReturn(env,item.id,input);
+    if (/return_.*unavailable/i.test(error.message)) throw new HttpError(409,'O item, a reserva ou a solicitação mudou. Atualize a página.');
     throw error;
   }
   return json({ returnId }, 201);
@@ -231,14 +260,33 @@ export async function myRatings(env, user) {
   return json({ items });
 }
 
-export async function myReturns(env, user) {
+export async function myReturns(env,user,search) {
   requireUser(user);
-  const items = await all(env, `SELECT i.id,i.title,r.returned_on AS returnedOn,
-    (SELECT score FROM ratings WHERE item_id = i.id AND user_id = ?) AS rating
-    FROM returns r JOIN items i ON i.id = r.item_id
-    WHERE (r.recipient_id = ? OR i.author_id = ?) ORDER BY (rating IS NOT NULL), r.returned_on DESC LIMIT 80`,
-    user.id,user.id,user.id);
-  return json({ items });
+  const {page,offset,limit} = pageOf(search);
+  const where = 'FROM returns r JOIN items i ON i.id = r.item_id WHERE (r.recipient_id = ? OR r.actor_id = ? OR i.author_id = ?)';
+  const [records,count] = await env.DB.batch([
+    db(env,`SELECT i.id,i.title,r.id AS return_id,r.actor_id AS return_actor_id,r.recipient_id,i.author_id,
+      r.returned_on AS returnedOn,(SELECT score FROM ratings WHERE item_id = i.id AND user_id = ?) AS rating,
+      (SELECT comment FROM ratings WHERE item_id = i.id AND user_id = ?) AS comment
+      ${where} ORDER BY r.returned_on DESC,r.created_at DESC,r.id LIMIT ? OFFSET ?`,user.id,user.id,user.id,user.id,user.id,limit,offset),
+    db(env,'SELECT count(*) AS total ' + where,user.id,user.id,user.id)
+  ]);
+  const items = records.results.map(row => ({
+    id:row.id,title:row.title,returnedOn:row.returnedOn,rating:row.rating,comment:row.comment,
+    role:row.recipient_id === user.id ? 'recipient' : row.return_actor_id === user.id ? 'actor' : 'finder',
+    canRate:row.recipient_id === user.id || row.author_id === user.id,canViewReceipt:canViewReceipt(row,user)
+  }));
+  return json({items,total:count.results[0].total,page,perPage:limit});
+}
+
+export async function receipt(env,user,itemId) {
+  requireUser(user);
+  const record = await first(env,`SELECT r.id,i.id AS itemId,i.title,c.name AS category,r.returned_on AS returnedOn,
+    r.created_at AS recordedAt,r.recipient_name AS recipientName,u.name AS recordedBy,r.custody
+    FROM returns r JOIN items i ON i.id = r.item_id JOIN categories c ON c.id = i.category_id JOIN users u ON u.id = r.actor_id
+    WHERE r.item_id = ? AND (r.recipient_id = ? OR r.actor_id = ? OR ? = 'admin')`,id(itemId),user.id,user.id,user.role);
+  if (!record) throw new HttpError(404,'Comprovante não encontrado para esta conta.');
+  return json({receipt:record});
 }
 
 export async function adminDetails(env, itemId) {
@@ -250,5 +298,5 @@ export async function adminDetails(env, itemId) {
     db(env, `SELECT r.score,r.comment,r.perspective,r.created_at AS createdAt,u.name FROM ratings r
       JOIN users u ON u.id = r.user_id WHERE r.item_id = ? ORDER BY r.created_at`, item.id)
   ]);
-  return json({ timeline: timeline.results, ratings: ratings.results });
+  return json({ timeline: timeline.results.map(pickupAudit), ratings: ratings.results });
 }

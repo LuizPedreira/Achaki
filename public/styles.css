@@ -458,3 +458,69 @@ td .badge + .badge { margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Solicitações e entrega no campus */
+.contact-list, .return-list { display: grid; gap: 15px; }
+.contact-list { max-width: 840px; }
+.contact-card { gap: 9px; padding: clamp(16px,3vw,26px); border-radius: 6px; }
+.contact-card > *, .pickup-panel > *, .return-row > div { min-width: 0; }
+.contact-top, .receipt-controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.contact-top > span:first-child, .meeting-zone, .return-row small { color: var(--muted); font-size: .8rem; }
+.contact-card h3 { font: 500 clamp(1.35rem,2.6vw,1.7rem)/1.16 var(--display); }
+.contact-by { margin-top: -3px; }
+.claim-proof { border-left: 2px solid var(--line); margin: 6px 0; padding-left: 12px; }
+.claim-proof small, .claim-disclosure summary, .contact-options summary { color: var(--muted); font-size: .84rem; }
+.claim-proof p, .claim-disclosure p, .return-comment { color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.claim-disclosure summary, .contact-options summary { cursor: pointer; width: fit-content; padding: 5px 0; }
+.contact-options { border-top: 1px solid var(--line); padding-top: 4px; }
+.claim-disclosure[open] p, .contact-options[open] .record-actions { margin: 5px 0 9px; }
+.sector-note, .meeting-slip span, .meeting-slip p, .return-rating, .receipt-brand { display: flex; align-items: center; gap: 7px; }
+.sector-note, .pickup-explainer { color: var(--muted); font-size: .87rem; }
+.pickup-explainer { max-width: 58ch; margin-top: 13px; }
+.pickup-panel { display: grid; gap: 10px; margin: 5px 0; padding: 16px; background: #f7f6ef; border-left: 3px solid #a9a48a; }
+.pickup-panel h4, .meeting-slip strong { font: 550 1.15rem/1.3 var(--display); color: var(--ink); }
+.pickup-panel p { font-size: .9rem; overflow-wrap: anywhere; }
+.meeting-slip { display: grid; gap: 4px; }
+.meeting-slip + .meeting-slip { border-top: 1px solid #d8d7c9; padding-top: 10px; }
+.meeting-slip span { font-size: .78rem; font-weight: 650; color: #735626; }
+.meeting-slip.confirmed span { color: #266044; }
+.meeting-slip strong { font-size: clamp(1.2rem,2.9vw,1.55rem); }
+.meeting-slip .icon, .return-rating .icon { width: 16px; height: 16px; flex: none; }
+.return-list { max-width: 900px; gap: 0; }
+.return-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--line); padding: 17px 0; }
+.return-row h3 { font: 500 1.3rem/1.3 var(--display); margin: 4px 0; overflow-wrap: anywhere; }
+.return-rating, .return-comment { font-size: .85rem; }
+.receipt-page { max-width: 720px; margin: 0 auto; }
+.receipt-controls { margin-bottom: 16px; }
+.receipt-sheet { background: #fff; border: 1px solid var(--line); border-top: 4px solid var(--red); padding: clamp(20px,5vw,48px); }
+.receipt-brand { color: var(--muted); font-size: .83rem; }
+.receipt-brand .icon { color: var(--red); }
+.receipt-sheet h1 { font: 500 clamp(1.75rem,4.9vw,3rem)/1.12 var(--display); margin: 14px 0 24px; }
+.receipt-object, .receipt-facts { border-top: 1px solid var(--line); padding-top: 18px; }
+.receipt-object > span, .receipt-facts dt, .receipt-sheet footer span { color: var(--muted); font-size: .8rem; }
+.receipt-object h2 { font: 500 clamp(1.45rem,4vw,2rem)/1.18 var(--display); margin: 6px 0; overflow-wrap: anywhere; }
+.receipt-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px 26px; margin-top: 20px; }
+.receipt-facts dd { margin: 5px 0 0; overflow-wrap: anywhere; }
+.receipt-sheet footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 14px; display: grid; gap: 3px; }
+.receipt-sheet footer p { font-size: .8rem; margin-bottom: 6px; }
+.receipt-sheet code { font-size: .8rem; overflow-wrap: anywhere; }
+.receipt-item { margin-top: 15px; }
+@media (max-width: 600px) {
+  .contact-card { padding: 15px; }
+  .contact-card .button, .return-row .button, .receipt-controls .button, .contact-options summary, .claim-disclosure summary { min-height: 44px; }
+  .claim-disclosure summary, .contact-options summary { align-content: center; }
+  .pickup-panel { padding: 12px; }
+  .receipt-facts { grid-template-columns: 1fr; gap: 15px; }
+  .return-row { align-items: start; }
+  .return-row > div:first-child { flex: 1 1 100%; }
+  .dialog-head { position: sticky; top: 0; z-index: 1; background: var(--white); }
+  .gallery-main img { max-height: min(45svh,340px); }
+}
+@media print {
+  @page { size: A4; margin: 17mm; }
+  body:has(.receipt-sheet), body:has(.receipt-sheet) .main { margin: 0; padding: 0; min-height: 0; width: 100%; background: white; }
+  body:has(.receipt-sheet) :is(.header,.footer,.dock,.receipt-controls,.receipt-item,.skip,#toast,#dialog) { display: none !important; }
+  .receipt-page { max-width: none; }
+  .receipt-sheet { border: 0; border-top: 2pt solid #272620; padding: 8mm 0; break-inside: avoid; color: #151515; }
+  .receipt-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}

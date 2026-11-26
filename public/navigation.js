@@ -1,4 +1,4 @@
-const route = /^\/(?:item\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|perfil|configurar-admin|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?$/i;
+const route = /^\/(?:(?:item|comprovante)\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|perfil|configurar-admin|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?$/i;
 
 export function safePath(value, fallback = '/') {
   if (typeof value !== 'string' || value.length > 2500 || !value.startsWith('/') || /[\\#\u0000-\u001f]/.test(value)) return fallback;

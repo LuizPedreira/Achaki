@@ -8,6 +8,8 @@ O mural permite buscar por descrição e filtrar os objetos que estão no setor 
 
 Em **Meus registros**, quem publicou um objeto em aberto pode corrigir os dados, arquivar ou restaurar registros próprios. Essa edição fica disponível para perdas e encontrados que ainda estão com a pessoa que os registrou, enquanto não houver uma solicitação ativa ou reserva vinculada.
 
+Depois da aprovação, abra **Meus registros → Solicitações** para combinar o ponto de encontro e o horário de Brasília. Uma pessoa sugere e a outra confirma. Se houver uma sugestão de mudança, o combinado anterior vale até a confirmação. As duas partes podem baixar a retirada confirmada para a agenda do celular. Depois da entrega, o destinatário vinculado, quem a registrou e a administração podem consultar o comprovante privado e imprimi-lo.
+
 ## Rodar no computador
 
 Com Node.js 24 ou superior, na raiz do repositório:
@@ -85,8 +87,8 @@ Consulte as páginas oficiais sobre [domínios de Workers](https://developers.cl
 1. Entre como Ana e registre uma perda.
 2. Em outra janela, entre como Lucas e registre um encontrado da mesma categoria, marcando **Entreguei no setor**.
 3. Na conta da Ana, abra a perda e solicite a devolução em **Ver itens compatíveis**.
-4. Entre como setor e acesse **Solicitações**. Aprove o pedido, reserve e registre a entrega.
-5. Abra **Histórico** para conferir os movimentos. Use **Meus registros → Avaliações** em cada conta para avaliar.
+4. Entre como setor, abra **Solicitações**, aprove o pedido e sugira um ponto de encontro e um horário. Na conta da Ana, confirme a sugestão e baixe o evento para a agenda.
+5. Depois da retirada, registre a entrega no setor. Abra **Meus registros → Devoluções** para consultar o comprovante. Ana e Lucas também podem avaliar a devolução. O setor acompanha os movimentos em **Histórico**.
 
 O D1 oferece [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/). Para exportar o banco, use `npx --yes wrangler@4.162.0 d1 export achaki --remote --output backup.sql --config wrangler.production.json`. Mantenha uma cópia do bucket R2 junto do backup para recuperar as fotos.
 

@@ -1,5 +1,5 @@
-import { HttpError, all, date, db, first, id, json, normalize, phone, plain, run, stamp } from './http.mjs';
-import { loadItem } from './items.mjs';
+import { HttpError, all, date, db, first, id, json, normalize, phone, plain, run } from './http.mjs';
+import { loadItem, nextUpdate } from './items.mjs';
 
 export async function dashboard(env) {
   const [counts, recent, categories] = await env.DB.batch([
@@ -23,7 +23,7 @@ export async function dashboard(env) {
 export async function manageItem(env, user, itemId, input) {
   const item = await loadItem(env, itemId);
   if (!item) throw new HttpError(404, 'Item não encontrado.');
-  const time = stamp();
+  const time = nextUpdate(item);
   const version = [item.id, item.updated_at];
   let statements;
   switch (input.action) {

@@ -1,5 +1,5 @@
 import { HttpError, all, choice, date, db, digest, first, id, json, normalize, now,
-  pageOf, plain, requireUser, run, stamp, throttle } from './http.mjs';
+  pageOf, plain, requireUser, run, throttle } from './http.mjs';
 
 const activeContactCount = `CASE WHEN i.kind = 'found' THEN
   (SELECT count(*) FROM contacts c WHERE c.item_id = i.id AND c.status IN ('pending','approved'))
@@ -12,7 +12,7 @@ const authorPublication = `CASE WHEN i.kind = 'found' AND i.publication = 'publi
   AND (SELECT review_required FROM settings WHERE id = 1) = 1 THEN 'pending' ELSE i.publication END`;
 
 export const itemQuery = `SELECT i.*, c.name AS category, u.name AS author_name, u.phone AS author_phone,
-  r.returned_on, r.id AS return_id, r.recipient_id, r.recipient_name, r.notes AS return_notes, r.lost_id,
+  r.returned_on, r.id AS return_id, r.actor_id AS return_actor_id, r.recipient_id, r.recipient_name, r.notes AS return_notes, r.lost_id,
   (SELECT group_concat(m.id) FROM (SELECT id FROM media WHERE item_id = i.id AND discard = 0 ORDER BY position) m) AS photos,
   (${activeContactCount}) AS contact_count, (${linkedReservation}) AS linked_reservation,
   (SELECT score FROM ratings WHERE item_id = i.id AND perspective = 'finder') AS finder_rating,
@@ -45,7 +45,7 @@ function canChangeOwnItem(item) {
   return item.status === 'open' && item.custody !== 'campus' && !item.contact_count && !item.linked_reservation;
 }
 
-const nextUpdate = item => new Date(Math.max(Date.now(), Date.parse(item.updated_at) + 1)).toISOString();
+export const nextUpdate = item => new Date(Math.max(Date.now(), Date.parse(item.updated_at) + 1)).toISOString();
 
 export async function metadata(env) {
   const [categories, locations, settings] = await env.DB.batch([
@@ -61,6 +61,9 @@ export async function loadItem(env, itemId) {
 }
 
 export const manages = (item, user) => Boolean(user && (item.custody === 'campus' ? user.role === 'admin' : item.author_id === user.id));
+
+export const canViewReceipt = (row,user) => Boolean(user && row.return_id &&
+  (user.role === 'admin' || user.id === row.return_actor_id || user.id === row.recipient_id));
 
 export function visible(item, user) {
   return Boolean(item && (
@@ -136,7 +139,11 @@ export async function listItems(env, search, { mode = 'public', user = null } = 
   return {
     items: records.results.map(row => {
       const item = itemView(row, mode !== 'public');
-      if (mode === 'mine') item.canChange = canChangeOwnItem(row);
+      if (mode !== 'public') item.canViewReceipt = mode === 'admin' ? Boolean(row.return_id) : canViewReceipt(row,user);
+      if (mode === 'mine') {
+        item.canChange = canChangeOwnItem(row);
+        if (row.return_id && !item.canViewReceipt) Object.assign(item,{recipientId:null,recipientName:null,returnNotes:null,lostId:null});
+      }
       return item;
     }),
     total: count.results[0].total, page, perPage: limit
@@ -150,6 +157,7 @@ export async function itemDetails(env, user, itemId) {
   const data = itemView(item);
   data.isMine = item.author_id === user?.id;
   data.canManage = manages(item, user);
+  data.canViewReceipt = canViewReceipt(item,user);
   data.canRate = item.return_id && user && (item.author_id === user.id || item.recipient_id === user.id);
   if (data.canRate) data.rating = item.author_id === user.id ? item.finder_rating : item.recipient_rating;
   if (privileged && item.kind === 'lost') {
@@ -222,8 +230,8 @@ export async function transferToCampus(env, user, itemId) {
   const item = await loadItem(env, itemId);
   if (!item || item.kind !== 'found' || item.author_id !== user.id || item.archived_at) throw new HttpError(404, 'Item não encontrado.');
   const result = await run(env, `UPDATE items SET custody = 'campus', updated_by = ?, updated_at = ?
-    WHERE id = ? AND custody = 'finder' AND status <> 'returned' AND archived_at IS NULL`, user.id, stamp(), item.id);
-  if (!result.meta.changes) throw new HttpError(409, 'Este item já foi devolvido ou entregue ao setor.');
+    WHERE id = ? AND updated_at = ? AND custody = 'finder' AND status <> 'returned' AND archived_at IS NULL`, user.id, nextUpdate(item), item.id, item.updated_at);
+  if (!result.meta.changes) throw new HttpError(409, 'O registro mudou. Atualize a página antes de confirmar a entrega ao setor.');
   return json({});
 }
 

@@ -3,6 +3,7 @@ import * as auth from './auth.mjs';
 import * as items from './items.mjs';
 import * as media from './media.mjs';
 import * as requests from './requests.mjs';
+import { updatePickup, pickupCalendar } from './pickups.mjs';
 import * as admin from './admin.mjs';
 export { PasswordDerivations } from './passwords.mjs';
 
@@ -16,6 +17,7 @@ const routes = [
   ['GET', /^\/items\/([^/]+)\/matches$/, ({ env,user }, id) => items.listMatches(env,user,id)],
   ['GET', /^\/items\/([^/]+)\/claim-options$/, ({ env,user }, id) => items.claimOptions(env,user,id)],
   ['POST', /^\/items\/([^/]+)\/contact$/, ({ env,user,body }, id) => requests.requestContact(env,user,id,body)],
+  ['GET', /^\/items\/([^/]+)\/receipt$/, ({ env,user }, id) => requests.receipt(env,user,id)],
   ['POST', /^\/items\/([^/]+)\/return$/, ({ env,user,body }, id) => requests.returnItem(env,user,id,body)],
   ['POST', /^\/items\/([^/]+)\/rating$/, ({ env,user,body }, id) => requests.rating(env,user,id,body)],
   ['GET', /^\/mine$/, async ({ env,user,url }) => json(await items.listItems(env,url.searchParams,{ mode: 'mine',user }))],
@@ -23,9 +25,11 @@ const routes = [
   ['POST', /^\/mine\/([^/]+)\/archive$/, ({ env,user,body }, id) => items.archiveOwnItem(env,user,id,body)],
   ['POST', /^\/mine\/([^/]+)\/resolve$/, ({ env,user,body }, id) => items.resolveOwnLoss(env,user,id,body)],
   ['GET', /^\/ratings$/, ({ env,user }) => requests.myRatings(env,user)],
-  ['GET', /^\/returns$/, ({ env,user }) => requests.myReturns(env,user)],
+  ['GET', /^\/returns$/, ({ env,user,url }) => requests.myReturns(env,user,url.searchParams)],
   ['GET', /^\/contacts$/, ({ env,user,url }) => requests.inbox(env,user,url.searchParams)],
   ['GET', /^\/contacts\/summary$/, ({ env,user }) => requests.contactSummary(env,user)],
+  ['POST', /^\/contacts\/([^/]+)\/pickup$/, ({ env,user,body }, id) => updatePickup(env,user,id,body)],
+  ['GET', /^\/contacts\/([^/]+)\/calendar\.ics$/, ({ env,user }, id) => pickupCalendar(env,user,id)],
   ['PATCH', /^\/contacts\/([^/]+)$/, ({ env,user,body }, id) => requests.reviewContact(env,user,id,body)],
   ['GET', /^\/media\/([^/]+)$/, ({ env,user }, id) => media.readPhoto(env,user,id)],
   ['POST', /^\/media$/, ({ env,request,user }) => media.upload(env,request,user), 'binary'],
@@ -55,7 +59,7 @@ const routes = [
   ['GET', /^\/admin\/history\.csv$/, ({ env,url }) => admin.exportHistory(env,url.searchParams)]
 ];
 
-const htmlRoute = /^\/(?:item\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|entrar|cadastro|recuperar-senha|redefinir-senha|configurar-admin|perfil|ajuda|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?\/?$/i;
+const htmlRoute = /^\/(?:(?:item|comprovante)\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|entrar|cadastro|recuperar-senha|redefinir-senha|configurar-admin|perfil|ajuda|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?\/?$/i;
 const assetRoute = /^\/(?:app\.js|icons\.js|navigation\.js|styles\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
 
 async function handle(request, env, context) {
