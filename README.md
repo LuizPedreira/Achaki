@@ -4,6 +4,8 @@
 
 Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
+O mural permite buscar por descrição e filtrar os objetos que estão no setor ou com quem os encontrou. Se a busca não localizar o objeto, o formulário de perda aproveita o termo, a categoria e o local informados. A ficha privada mostra fotos de possíveis achados e permite vincular o pedido ao registro existente. Quem recuperar o próprio objeto pode encerrar a busca nessa ficha. No mural da pessoa conectada, há atalhos para os pedidos que aguardam resposta e as retiradas aprovadas.
+
 Em **Meus registros**, quem publicou um objeto em aberto pode corrigir os dados, arquivar ou restaurar registros próprios. Essa edição fica disponível para perdas e encontrados que ainda estão com a pessoa que os registrou, enquanto não houver uma solicitação ativa ou reserva vinculada.
 
 ## Rodar no computador

@@ -89,7 +89,10 @@ export function json(value, status = 200, headers = {}) {
 }
 
 export function redirect(location, headers = {}) {
-  return new Response(null, { status: 303, headers: { Location: location, 'Cache-Control': 'no-store', ...headers } });
+  const result = new Headers(headers);
+  result.set('Location', location);
+  result.set('Cache-Control', 'no-store');
+  return new Response(null, { status: 303, headers: result });
 }
 
 export async function requestBytes(request, limit) {
@@ -130,10 +133,7 @@ export async function readJSON(request) {
   }
 }
 
-export function safePath(value) {
-  if (typeof value !== 'string' || !/^\/(?:item\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|perfil|configurar-admin|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?$/i.test(value)) return '/';
-  return value;
-}
+export { safePath } from '../public/navigation.js';
 
 export function cookieValue(request, name) {
   const raw = request.headers.get('Cookie') || '';

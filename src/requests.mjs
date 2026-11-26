@@ -10,7 +10,10 @@ export async function requestContact(env, user, itemId, input) {
   if (!item || item.kind !== 'found' || item.publication !== 'public' || item.archived_at) throw new HttpError(404, 'Item não encontrado.');
   if (item.author_id === user.id || !['open','reserved'].includes(item.status)) throw new HttpError(409, 'Este item não recebe novas solicitações.');
   const existing = await first(env, "SELECT id,lost_id AS lostId,status FROM contacts WHERE item_id = ? AND requester_id = ? AND status IN ('pending','approved')", item.id, user.id);
-  if (existing) return json({ contact: existing });
+  if (existing) {
+    if (input.lostId && existing.lostId !== input.lostId) throw new HttpError(409, 'Você já tem uma solicitação para este objeto vinculada a outra perda.');
+    return json({ contact: existing });
+  }
   const message = plain(input.message, 'o detalhe que comprova que o item é seu', 10, 700);
   let lostId = input.lostId ? id(input.lostId) : null;
   if (!lostId) {
@@ -27,7 +30,7 @@ export async function requestContact(env, user, itemId, input) {
       SELECT ?,'lost',?,title,?,category_id,location,occurred_on,'private',search_text,?,id,? FROM items
       WHERE id = ? AND publication = 'public' AND status IN ('open','reserved') AND archived_at IS NULL
       AND NOT EXISTS (SELECT 1 FROM contacts WHERE item_id = items.id AND requester_id = ? AND status IN ('pending','approved'))`,
-      lostId, user.id, 'Solicitação de recuperação criada ao pedir contato.', await digest(`recovery:${item.id}`), user.id, item.id, user.id));
+      lostId, user.id, 'Solicitação de recuperação criada ao pedir contato.', await digest(`recovery:${item.id}:${lostId}`), user.id, item.id, user.id));
   }
   changes.push(db(env, `INSERT INTO contacts(id,item_id,requester_id,lost_id,message)
     SELECT ?,f.id,?,l.id,? FROM items f JOIN items l ON l.id = ?
@@ -42,8 +45,23 @@ export async function requestContact(env, user, itemId, input) {
     if (!/unique/i.test(error.message)) throw error;
   }
   const winner = await first(env, "SELECT id,lost_id AS lostId,status FROM contacts WHERE item_id = ? AND requester_id = ? AND status IN ('pending','approved')", item.id, user.id);
-  if (winner) return json({ contact: winner });
+  if (winner && (!input.lostId || winner.lostId === input.lostId)) return json({ contact: winner });
   throw new HttpError(409, 'O item ou o registro de perda selecionado não está mais disponível.');
+}
+
+const liveContact = "i.archived_at IS NULL AND i.status IN ('open','reserved')";
+const awaitingReview = `c.status = 'pending' AND ${liveContact} AND c.requester_id <> ?`;
+const awaitingPickup = `c.status = 'approved' AND ${liveContact} AND c.requester_id = ?`;
+
+export async function contactSummary(env, user) {
+  requireUser(user);
+  const joined = 'FROM contacts c JOIN items i ON i.id = c.item_id';
+  const counts = await first(env, `SELECT
+    (SELECT count(*) ${joined} WHERE ${awaitingReview} AND i.custody = 'finder' AND i.author_id = ?) AS review,
+    (SELECT count(*) ${joined} WHERE ${awaitingPickup}) AS pickup,
+    CASE WHEN ? = 'admin' THEN (SELECT count(*) ${joined} WHERE ${awaitingReview} AND i.custody = 'campus') ELSE 0 END AS campus`,
+    user.id,user.id,user.id,user.role,user.id);
+  return json(counts);
 }
 
 export async function inbox(env, user, search) {
@@ -51,6 +69,11 @@ export async function inbox(env, user, search) {
   const staff = search.get('scope') === 'campus' && user.role === 'admin';
   const filters = [staff ? "i.custody = 'campus'" : "(c.requester_id = ? OR (i.custody = 'finder' AND i.author_id = ?))"];
   const args = staff ? [] : [user.id,user.id];
+  if (search.has('fila')) {
+    const queue = choice(search.get('fila'), ['responder','retirar'], 'uma fila disponível');
+    filters.push(queue === 'responder' ? awaitingReview : awaitingPickup);
+    args.push(user.id);
+  }
   for (const [key, column] of [['item','item_id'],['lost','lost_id']]) {
     if (!search.has(key)) continue;
     filters.push(`c.${column} = ?`);

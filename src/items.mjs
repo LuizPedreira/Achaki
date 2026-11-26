@@ -93,6 +93,11 @@ function filterClauses(search) {
     terms.push('i.status = ?');
     params.push(choice(status, ['open', 'reserved', 'returned', 'recovered'], 'um status válido'));
   }
+  const custody = search.get('custody');
+  if (custody) {
+    terms.push('i.custody = ?');
+    params.push(choice(custody, ['campus', 'finder'], 'uma opção de guarda'));
+  }
   const start = date(search.get('from'), true);
   const end = date(search.get('to'), true);
   if (start && end && start > end) throw new HttpError(400, 'A data inicial precisa vir antes da data final.');
@@ -147,7 +152,14 @@ export async function itemDetails(env, user, itemId) {
   data.canManage = manages(item, user);
   data.canRate = item.return_id && user && (item.author_id === user.id || item.recipient_id === user.id);
   if (data.canRate) data.rating = item.author_id === user.id ? item.finder_rating : item.recipient_rating;
-  if (privileged && item.kind === 'lost') data.recoveryForId = item.recovery_for_id;
+  if (privileged && item.kind === 'lost') {
+    data.recoveryForId = item.recovery_for_id;
+    data.recoveredItemId = item.recovered_item_id;
+    data.contactCount = item.contact_count;
+    data.canResolve = data.isMine && !item.archived_at && canChangeOwnItem(item);
+    data.updatedAt = item.updated_at;
+    data.archivedAt = item.archived_at;
+  }
   if (privileged && item.return_id) data.returnSummary = { returnedOn: item.returned_on, custody: item.custody };
   if (user && item.kind === 'found' && item.author_id !== user.id) {
     data.request = await first(env, 'SELECT id,status,lost_id AS lostId FROM contacts WHERE item_id = ? AND requester_id = ? ORDER BY created_at DESC LIMIT 1', item.id, user.id);
@@ -220,12 +232,54 @@ export async function listMatches(env, user, lostId) {
   const lost = await loadItem(env, lostId);
   if (!lost || lost.kind !== 'lost' || lost.archived_at || lost.status !== 'open' ||
     (lost.author_id !== user.id && user.role !== 'admin')) throw new HttpError(404, 'Registro de perda não encontrado.');
-  const items = await all(env, `${itemQuery} WHERE i.kind = 'found' AND i.publication = 'public' AND i.status IN ('open','reserved')
-    AND i.archived_at IS NULL AND i.author_id <> ? AND i.category_id = ?
-    AND ((? IS NOT NULL AND i.id = ?) OR (? IS NULL AND i.occurred_on >= date(?, '-7 days')))
-    ORDER BY abs(julianday(i.occurred_on) - julianday(?)), i.created_at DESC LIMIT 15`,
-    lost.author_id, lost.category_id, lost.recovery_for_id, lost.recovery_for_id, lost.recovery_for_id, lost.occurred_on, lost.occurred_on);
-  return json({ items: items.map(item => itemView(item)) });
+  const ignore = new Set(('com dos das meu minha meus minhas uma uns umas sem para que item objeto perdido perdida ' +
+    normalize(lost.category)).split(' '));
+  const words = [...new Set(normalize(lost.title).split(/[^\p{L}\p{N}]+/u))].filter(word => word.length >= 3 && !ignore.has(word)).slice(0, 6);
+  const place = normalize(lost.location || '');
+  const items = await all(env, `WITH ranked AS (
+    SELECT f.id, f.created_at, abs(julianday(f.occurred_on) - julianday(?)) AS days_apart,
+      (? <> '' AND substr(f.search_text, instr(f.search_text, char(31)) + 1) = ?) AS same_place,
+      (SELECT count(*) FROM json_each(?) w WHERE instr(' ' || substr(f.search_text,1,instr(f.search_text,char(31))-1), ' ' || w.value) > 0) AS common_words
+    FROM items f WHERE f.kind = 'found' AND f.publication = 'public' AND f.archived_at IS NULL
+      AND f.author_id <> ? AND f.category_id = ? AND (f.status = 'open' OR (f.status = 'reserved' AND f.reserved_lost_id = ?))
+      AND ${lost.recovery_for_id ? 'f.id = ?' : "f.occurred_on >= date(?, '-7 days')"}
+    ORDER BY common_words DESC, same_place DESC, days_apart, f.created_at DESC, f.id LIMIT 15
+  ) SELECT matched.*, ranked.common_words, ranked.same_place, ranked.days_apart
+    FROM ranked JOIN (${itemQuery}) matched ON matched.id = ranked.id
+    ORDER BY ranked.common_words DESC, ranked.same_place DESC, ranked.days_apart, ranked.created_at DESC, ranked.id`,
+    lost.occurred_on, place, place, JSON.stringify(words), lost.author_id, lost.category_id, lost.id, lost.recovery_for_id || lost.occurred_on);
+  return json({ items: items.map(row => ({ ...itemView(row), reasons: [
+    ...(row.common_words ? ['Palavras em comum'] : []), ...(row.same_place ? ['Mesmo local'] : []),
+    ...(row.days_apart <= 3 ? ['Datas próximas'] : [])
+  ] })) });
+}
+
+export async function claimOptions(env, user, foundId) {
+  requireUser(user);
+  const found = await loadItem(env, foundId);
+  if (!found || found.kind !== 'found' || found.publication !== 'public' || found.archived_at) throw new HttpError(404, 'Objeto não encontrado.');
+  const losses = await all(env, `SELECT id, title, occurred_on AS occurredOn FROM items
+    WHERE author_id = ? AND kind = 'lost' AND status = 'open' AND archived_at IS NULL
+      AND category_id = ? AND (recovery_for_id IS NULL OR recovery_for_id = ?)
+    ORDER BY (recovery_for_id IS NOT NULL) DESC, occurred_on DESC, created_at DESC, id`, user.id, found.category_id, found.id);
+  return json({ losses });
+}
+
+export async function resolveOwnLoss(env, user, itemId, input) {
+  requireUser(user);
+  const item = await loadItem(env, itemId);
+  if (!item || item.kind !== 'lost' || item.author_id !== user.id || item.archived_at) throw new HttpError(404, 'Perda não encontrada.');
+  if (item.status === 'recovered' && !item.recovered_item_id) return json({ status: 'recovered' });
+  if (input.updatedAt !== item.updated_at) throw new HttpError(409, 'O registro mudou. Atualize a página antes de encerrar a perda.');
+  const result = await run(env, `UPDATE items AS i SET status = 'recovered', updated_by = ?, updated_at = ?
+    WHERE i.id = ? AND i.kind = 'lost' AND i.author_id = ? AND i.archived_at IS NULL AND i.updated_at = ?
+    AND ${authorCanChange}`, user.id, nextUpdate(item), item.id, user.id, item.updated_at);
+  if (!result.meta.changes) {
+    const current = await loadItem(env, item.id);
+    if (current?.status === 'recovered' && !current.recovered_item_id && !current.archived_at) return json({ status: 'recovered' });
+    throw new HttpError(409, 'A perda mudou ou tem uma solicitação ou reserva em andamento.');
+  }
+  return json({ status: 'recovered' });
 }
 
 async function ownItemForChange(env, user, itemId, updatedAt, archived = false) {

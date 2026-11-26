@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import worker from '../src/worker.mjs';
 import { createLocalEnv } from '../scripts/local-env.mjs';
-import { today } from '../src/http.mjs';
+import { redirect, today } from '../src/http.mjs';
+import { lossFormPath, safePath } from '../public/navigation.js';
 
 const origin = 'http://127.0.0.1:8787';
 const password = 'Exemplo#Achaki2026';
@@ -65,6 +66,10 @@ test('guarda direta: foto, busca, privacidade, identificação, devolução atô
 
   const [claimCode, claim] = await owner('/api/items/' + item + '/contact',{ message:'Há uma fita azul no lado direito do estojo.' });
   assert.equal(claimCode,201,JSON.stringify(claim));
+  assert.equal((await visitor('/api/contacts/summary'))[0],401);
+  assert.deepEqual((await finder('/api/contacts/summary'))[1],{ review:1,pickup:0,campus:0 });
+  assert.deepEqual((await finder('/api/contacts?fila=responder'))[1].contacts.map(row => row.id),[claim.contact.id]);
+  assert.equal((await owner('/api/contacts?fila=responder'))[1].total,0);
   assert.equal((await visitor('/api/items/' + claim.contact.lostId))[0],404);
   assert.equal((await owner('/api/mine?kind=lost'))[1].items[0].id,claim.contact.lostId);
   assert.equal((await owner('/api/items/' + claim.contact.lostId + '/matches'))[1].items[0].id,item);
@@ -128,12 +133,21 @@ test('setor: moderação, perda vinculada, devolução administrativa, históric
   const recategorization = { ...lossData.item,categoryId:'acessorios' };
   assert.equal((await staff('/api/admin/items/' + lost,recategorization,{ method:'PATCH' }))[0],409);
   const contact = (await owner('/api/items/' + item + '/contact',{ lostId:lost,message:'O estojo tem uma marca azul e um risco.' }))[1].contact;
+  assert.deepEqual((await staff('/api/contacts/summary'))[1],{ review:0,pickup:0,campus:1 });
+  assert.equal((await finder('/api/contacts/summary'))[1].campus,0);
+  assert.equal((await staff('/api/contacts?scope=campus&fila=responder'))[1].total,1);
+  assert.equal((await finder('/api/contacts?scope=campus&fila=responder'))[1].total,0);
   assert.equal((await finder('/api/contacts/' + contact.id,{ action:'approve' },{ method:'PATCH' }))[0],403);
   assert.equal((await staff('/api/contacts?scope=campus'))[1].contacts[0].id,contact.id);
   assert.equal((await staff('/api/contacts/' + contact.id,{ action:'approve' },{ method:'PATCH' }))[0],200);
+  assert.deepEqual((await owner('/api/contacts/summary'))[1],{ review:0,pickup:1,campus:0 });
+  assert.deepEqual((await owner('/api/contacts?fila=retirar'))[1].contacts.map(row => row.id),[contact.id]);
+  assert.equal((await staff('/api/contacts/summary'))[1].campus,0);
   assert.equal((await owner('/api/contacts'))[1].contacts[0].sector.location,'Secretaria');
   assert.equal((await finder('/api/items/' + item + '/return',{ returnedOn:today() }))[0],403);
   assert.equal((await staff('/api/items/' + item + '/return',{ returnedOn:today(),notes:'Entregue na secretaria.' }))[0],201);
+  assert.equal((await owner('/api/contacts/summary'))[1].pickup,0);
+  assert.equal((await owner('/api/contacts?fila=retirar'))[1].total,0);
   const history = (await staff('/api/admin/items?history=complete'))[1];
   assert.equal(history.total,2);
   assert.equal(history.items.find(row => row.id === item).recipientName,'Lucas Martins');
@@ -274,7 +288,14 @@ test('arquivos públicos, páginas por URL e classificação opcional', async t 
   assert.equal(page.headers.get('Referrer-Policy'),'same-origin');
   const [assets, css] = await client('/styles.css',undefined,{ raw:true });
   assert.equal(assets,200);
-  assert.match(await css.text(),/\.quick-card\.found/);
+  assert.match(await css.text(),/\.mural-search/);
+  const [scriptCode,script] = await client('/app.js',undefined,{ raw:true });
+  assert.equal(scriptCode,200);
+  for (const [,source] of (await script.text()).matchAll(/^import .*? from '\.\/(.+?)';/gm)) {
+    const [code,module] = await client('/' + source,undefined,{ raw:true });
+    assert.equal(code,200,source);
+    assert.match(module.headers.get('Content-Type'),/javascript/,source);
+  }
   assert.equal((await client('/api/health'))[0],200);
   assert.equal((await client('/api/media/suggestion',photo,{ binary:true }))[0],401);
   await client('/api/auth/register',account('Ana Barbosa','ana@example.test'));
@@ -302,4 +323,128 @@ test('o domínio de produção redireciona a HTTP e protege as sessões no HTTPS
   assert.equal(registered.status,201);
   assert.equal(registered.headers.get('Strict-Transport-Security'),'max-age=31536000');
   assert.match(registered.headers.get('Set-Cookie'),/^__Host-achaki_session=.*; Path=\/; HttpOnly; SameSite=Lax; Secure$/);
+});
+
+test('a busca acompanha o usuário pelo login até o formulário de perda', () => {
+  const params = new URLSearchParams({ q:'Estojo azul',category:'acessorios',location:'Biblioteca',status:'open',from:'2026-01-10' });
+  const target = lossFormPath(params);
+  const afterLogin = new URLSearchParams({ next:target });
+  assert.equal(safePath(afterLogin.get('next')),target);
+  const fields = new URL(target,origin);
+  assert.equal(fields.pathname,'/novo/lost');
+  assert.deepEqual(Object.fromEntries(fields.searchParams),{ objeto:'Estojo azul',categoria:'acessorios',local:'Biblioteca' });
+  assert.equal(lossFormPath(new URLSearchParams()),'/novo/lost');
+  assert.equal(safePath('/meus-registros?aba=perdi'),'/meus-registros?aba=perdi');
+  assert.equal(safePath('//exemplo.invalid/'),'/');
+  assert.equal(safePath('/novo/../entrar'),'/');
+  const headers = new Headers();
+  headers.append('Set-Cookie','state=; Max-Age=0');
+  headers.append('Set-Cookie','session=example; HttpOnly');
+  const response = redirect(target,headers);
+  assert.equal(response.headers.get('Location'),target);
+  assert.deepEqual(response.headers.getSetCookie(),headers.getSetCookie());
+});
+
+test('comparação privada ordena por características, filtra por guarda e acompanha reservas', async t => {
+  const local = app();
+  t.after(local.close);
+  const owner = local.client(), finder = local.client(), visitor = local.client();
+  await Promise.all([
+    owner('/api/auth/register',account('Lucas Martins','lucas@example.test')),
+    finder('/api/auth/register',account('Setor do Campus','setor@example.test'))
+  ]);
+  assert.equal((await finder('/api/bootstrap/admin',{},{ headers:{Authorization:'Bearer ' + local.bootstrapToken} }))[0],200);
+  const lost = (await owner('/api/items',object('Meu fone azul',{ kind:'lost',location:'Biblioteca' })))[1].item;
+  const other = (await owner('/api/items',object('Cabo branco',{ kind:'lost',location:'Cantina' })))[1].item;
+  const yesterday = new Date(new Date(today() + 'T12:00:00Z').valueOf() - 86400000).toISOString().slice(0,10);
+  async function found(title,location,custody,day = today()) {
+    const image = (await finder('/api/media',photo,{ binary:true }))[1].id;
+    const [code,result] = await finder('/api/items',object(title,{ photos:[image],description:'Objeto deixado sobre uma mesa.',location,custody,occurredOn:day }));
+    assert.equal(code,201,JSON.stringify(result));
+    return result.item;
+  }
+  const matching = await found('Fone azul-claro','Biblioteca','campus',yesterday);
+  const cable = await found('Cabo branco','Cantina','finder');
+  assert.deepEqual((await visitor('/api/items?custody=campus&status=open'))[1].items.map(i => i.id),[matching.id]);
+  assert.deepEqual((await visitor('/api/items?custody=finder'))[1].items.map(i => i.id),[cable.id]);
+  const matches = '/api/items/' + lost.id + '/matches';
+  const options = '/api/items/' + matching.id + '/claim-options';
+  assert.equal((await visitor(options))[0],401);
+  assert.deepEqual((await finder(options))[1].losses,[]);
+  assert.deepEqual((await owner(options))[1].losses.map(i => i.id).sort(),[lost.id,other.id].sort());
+  assert.equal((await visitor(matches))[0],401);
+  const candidates = (await owner(matches))[1].items;
+  assert.deepEqual(candidates.map(i => i.id),[matching.id,cable.id]);
+  assert.deepEqual(candidates[0].reasons,['Palavras em comum','Mesmo local','Datas próximas']);
+  assert.equal(candidates[0].authorId,undefined);
+  const [sent,{contact}] = await owner('/api/items/' + matching.id + '/contact',{ lostId:lost.id,message:'O lado direito tem uma marca.' });
+  assert.equal(sent,201);
+  assert.equal(contact.lostId,lost.id);
+  assert.equal((await owner('/api/items/' + matching.id + '/contact',{ lostId:other.id,message:'Outra marca na lateral.' }))[0],409);
+  assert.equal((await owner('/api/mine?kind=lost'))[1].total,2);
+  assert.equal((await finder('/api/contacts/' + contact.id,{action:'approve'},{method:'PATCH'}))[0],200);
+  assert.equal((await owner(matches))[1].items[0].status,'reserved');
+  assert.deepEqual((await owner('/api/items/' + other.id + '/matches'))[1].items.map(i => i.id),[cable.id]);
+  assert.deepEqual((await visitor('/api/items?custody=campus&status=open'))[1].items,[]);
+  assert.equal((await owner('/api/mine/' + lost.id + '/resolve',{updatedAt:lost.updatedAt}))[0],409);
+});
+
+test('recuperação por conta própria preserva a privacidade e o histórico de entregas', async t => {
+  const local = app();
+  t.after(local.close);
+  const owner = local.client(), other = local.client(), visitor = local.client();
+  await Promise.all([
+    owner('/api/auth/register',account('Lucas Martins','lucas@example.test')),
+    other('/api/auth/register',account('Ana Barbosa','ana@example.test'))
+  ]);
+  const { item } = (await owner('/api/items',object('Estojo azul',{ kind:'lost' })))[1];
+  const own = '/api/mine/' + item.id;
+  const detail = '/api/items/' + item.id;
+  const payload = { updatedAt:item.updatedAt };
+  assert.equal((await visitor(own + '/resolve',payload))[0],401);
+  assert.equal((await other(own + '/resolve',payload))[0],404);
+  assert.equal((await owner(own + '/resolve',{ updatedAt:'antiga' }))[0],409);
+  assert.equal((await owner(detail))[1].item.canResolve,true);
+  assert.deepEqual((await Promise.all([owner(own + '/resolve',payload),owner(own + '/resolve',payload)])).map(([code])=>code),[200,200]);
+  const resolved = (await owner(detail))[1].item;
+  assert.equal(resolved.status,'recovered');
+  assert.equal(resolved.canResolve,false);
+  assert.equal(resolved.recoveredItemId,null);
+  assert.equal((await owner(detail + '/matches'))[0],404);
+  assert.equal((await other(detail))[0],404);
+  assert.equal((await visitor('/api/items?q=estojo'))[1].total,0);
+  assert.deepEqual((await owner('/api/returns'))[1].items,[]);
+  assert.equal(local.sqlite.prepare("SELECT count(*) AS n FROM audit WHERE item_id = ? AND action = 'status' AND details = 'recovered'").get(item.id).n,1);
+});
+
+test('um pedido ativo impede encerrar a perda, e um novo pedido preserva o registro encerrado', async t => {
+  const local = app();
+  t.after(local.close);
+  const owner = local.client(), finder = local.client();
+  await Promise.all([
+    owner('/api/auth/register',account('Lucas Martins','lucas@example.test')),
+    finder('/api/auth/register',account('Ana Barbosa','ana@example.test'))
+  ]);
+  const image = (await finder('/api/media',photo,{binary:true}))[1].id;
+  const {item:found} = (await finder('/api/items',object('Fone da biblioteca',{photos:[image]})))[1];
+  const request = '/api/items/' + found.id + '/contact';
+  const message = { message:'A haste do meu fone tem uma inscrição.' };
+  const {contact:first} = (await owner(request,message))[1];
+  const loss = (await owner('/api/items/' + first.lostId))[1].item;
+  const resolve = '/api/mine/' + loss.id + '/resolve';
+  assert.equal((await owner(resolve,{updatedAt:loss.updatedAt}))[0],409);
+  assert.equal((await owner('/api/contacts/' + first.id,{action:'cancel'},{method:'PATCH'}))[0],200);
+  const [[closeCode],[sendCode,linked]] = await Promise.all([
+    owner(resolve,{updatedAt:loss.updatedAt}),owner(request,{...message,lostId:loss.id})
+  ]);
+  assert.deepEqual([closeCode,sendCode].sort(), closeCode === 200 ? [200,409] : [201,409]);
+  if (sendCode === 201) {
+    assert.equal((await owner('/api/contacts/' + linked.contact.id,{action:'cancel'},{method:'PATCH'}))[0],200);
+    assert.equal((await owner(resolve,{updatedAt:loss.updatedAt}))[0],200);
+  }
+  const [created,again] = await owner(request,message);
+  assert.equal(created,201,JSON.stringify(again));
+  assert.notEqual(again.contact.lostId,loss.id);
+  assert.equal((await owner('/api/items/' + loss.id))[1].item.status,'recovered');
+  assert.equal((await owner('/api/contacts?lost=' + loss.id))[1].contacts.every(row => row.status === 'cancelled'),true);
 });

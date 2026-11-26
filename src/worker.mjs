@@ -14,15 +14,18 @@ const routes = [
   ['POST', /^\/items$/, ({ env,user,body }) => items.createItem(env,user,body)],
   ['POST', /^\/items\/([^/]+)\/transfer$/, ({ env,user }, id) => items.transferToCampus(env,user,id)],
   ['GET', /^\/items\/([^/]+)\/matches$/, ({ env,user }, id) => items.listMatches(env,user,id)],
+  ['GET', /^\/items\/([^/]+)\/claim-options$/, ({ env,user }, id) => items.claimOptions(env,user,id)],
   ['POST', /^\/items\/([^/]+)\/contact$/, ({ env,user,body }, id) => requests.requestContact(env,user,id,body)],
   ['POST', /^\/items\/([^/]+)\/return$/, ({ env,user,body }, id) => requests.returnItem(env,user,id,body)],
   ['POST', /^\/items\/([^/]+)\/rating$/, ({ env,user,body }, id) => requests.rating(env,user,id,body)],
   ['GET', /^\/mine$/, async ({ env,user,url }) => json(await items.listItems(env,url.searchParams,{ mode: 'mine',user }))],
   ['PATCH', /^\/mine\/([^/]+)$/, ({ env,user,body }, id) => items.editItem(env,user,id,body,{ own: true })],
   ['POST', /^\/mine\/([^/]+)\/archive$/, ({ env,user,body }, id) => items.archiveOwnItem(env,user,id,body)],
+  ['POST', /^\/mine\/([^/]+)\/resolve$/, ({ env,user,body }, id) => items.resolveOwnLoss(env,user,id,body)],
   ['GET', /^\/ratings$/, ({ env,user }) => requests.myRatings(env,user)],
   ['GET', /^\/returns$/, ({ env,user }) => requests.myReturns(env,user)],
   ['GET', /^\/contacts$/, ({ env,user,url }) => requests.inbox(env,user,url.searchParams)],
+  ['GET', /^\/contacts\/summary$/, ({ env,user }) => requests.contactSummary(env,user)],
   ['PATCH', /^\/contacts\/([^/]+)$/, ({ env,user,body }, id) => requests.reviewContact(env,user,id,body)],
   ['GET', /^\/media\/([^/]+)$/, ({ env,user }, id) => media.readPhoto(env,user,id)],
   ['POST', /^\/media$/, ({ env,request,user }) => media.upload(env,request,user), 'binary'],
@@ -53,7 +56,7 @@ const routes = [
 ];
 
 const htmlRoute = /^\/(?:item\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|entrar|cadastro|recuperar-senha|redefinir-senha|configurar-admin|perfil|ajuda|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?\/?$/i;
-const assetRoute = /^\/(?:app\.js|icons\.js|styles\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
+const assetRoute = /^\/(?:app\.js|icons\.js|navigation\.js|styles\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
 
 async function handle(request, env, context) {
   const url = new URL(request.url);

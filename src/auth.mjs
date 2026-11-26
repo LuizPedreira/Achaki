@@ -275,7 +275,8 @@ export async function finishMicrosoft(env, request, url, user) {
     const headers = new Headers();
     headers.append('Set-Cookie', clear);
     headers.append('Set-Cookie', await newSession(env, request, account, false));
-    return redirect(account.phone ? safePath(attempt.next_path) : '/perfil?institucional=novo', headers);
+    const nextPath = safePath(attempt.next_path);
+    return redirect(account.phone ? nextPath : '/perfil?institucional=novo&next=' + encodeURIComponent(nextPath), headers);
   } catch {
     return error('falhou');
   }

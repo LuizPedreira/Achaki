@@ -1,4 +1,5 @@
 import { icon } from './icons.js';
+import { lossFormPath, safePath } from './navigation.js';
 
 const site = document.querySelector('#site');
 const dialog = document.querySelector('#dialog');
@@ -83,24 +84,24 @@ const itemHref = id => `/item/${encodeURIComponent(id)}`;
 const entry = (path, name, symbol) => `<a href="${path}" data-nav ${location.pathname === path ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${name}</span></a>`;
 
 function brand() {
-  return `<a class="brand" href="/" data-nav aria-label="${siteName}, início"><span class="brand-mark">${icon('box')}</span>
+  return `<a class="brand" href="/" data-nav aria-label="${siteName}, início"><span class="brand-mark">${icon('tag')}</span>
     <span>${siteName}${session.campus ? `<small>${e(session.campus)}</small>` : ''}</span></a>`;
 }
 
 function shell(content, { wide = false, auth = false, home = false } = {}) {
   if (auth) return `<main id="conteudo" tabindex="-1" class="main auth-main">${content}</main>`;
   const user = session.user;
-  const profile = user ? `<a class="profile-link" data-nav href="/perfil"><span class="avatar">${e(initial(user.name))}</span><span>${e(user.name.split(' ')[0])}</span></a>`
+  const profile = user ? `<a class="profile-link" data-nav href="/perfil" aria-label="Minha conta"><span class="avatar">${e(initial(user.name))}</span><span>${e(user.name.split(' ')[0])}</span></a>`
     : link('/entrar','Entrar',{ cls:'button secondary sign-in',symbol:'user' });
   return `<header class="header"><div class="header-inner">${brand()}<nav class="top-nav" aria-label="Principal">
-    ${entry('/','Início','home')}${entry('/novo/lost','Perdi algo','search')}${user ? entry('/meus-registros','Meus registros','list') : ''}
+    ${entry('/','Mural','home')}${entry('/meus-registros','Meus registros','list')}${entry('/ajuda','Como funciona','help')}
     ${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : ''}</nav>
-    <div class="header-actions">${profile}${link('/novo','Registrar item',{ cls:'button primary header-cta',symbol:'plus' })}</div></div></header>
+    <div class="header-actions">${profile}${home ? '' : link('/novo','Registrar item',{ cls:'button primary header-cta',symbol:'plus' })}</div></div></header>
     <main id="conteudo" tabindex="-1" class="main${wide ? ' admin-main' : home ? ' home-main' : ''}">${content}</main>
     <footer class="footer"><div><small>Projeto acadêmico${session.campus ? ` · ${e(session.campus)}` : ''}</small></div>
       <div>${link('/ajuda','Como funciona',{ cls:'text-link' })}<button type="button" class="text-link install-link" data-action="install" ${installPrompt ? '' : 'hidden'}>Instalar aplicativo</button></div></footer>
-    <nav class="dock" aria-label="Navegação móvel">${entry('/','Início','home')}${entry('/novo/lost','Perdi algo','search')}${entry('/novo','Registrar','plus')}
-    ${entry('/meus-registros','Registros','list')}${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : entry(user ? '/perfil' : '/entrar','Perfil','user')}</nav>`;
+    <nav class="dock" aria-label="Navegação móvel">${entry('/','Mural','home')}${entry('/novo','Registrar','plus')}
+    ${entry('/meus-registros','Registros','list')}${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : entry(user ? '/perfil' : '/entrar',user ? 'Perfil' : 'Entrar','user')}</nav>`;
 }
 
 function header(title, description, actions = '', kicker = '') {
@@ -168,42 +169,63 @@ function cover(item) {
     : `<span class="card-art ${e(item.categoryId)}">${icon(illustrations[item.categoryId] || 'box')}</span>`;
 }
 
-function card(item) {
-  return `<article class="item-card"><a href="${itemHref(item.id)}" class="item-link" data-nav>
-    <div class="item-cover">${cover(item)}</div>
-    <div class="item-body"><div class="item-top"><span class="item-category">${e(item.category)}</span>${badge(item.status)}</div>
+function card(item, lostId = '') {
+  const href = lostId ? withQuery(itemHref(item.id),'perda',lostId) : itemHref(item.id);
+  return `<article class="mural-record"><a href="${e(href)}" data-nav>
+    <span class="mural-photo">${cover(item)}</span><div class="mural-object"><span class="object-category">${e(item.category)}</span>
       <h3>${e(item.title)}</h3><div class="item-meta">${rowInfo('pin',item.location || 'Local não informado')}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
-    </div></a></article>`;
+      ${lostId ? `<p class="match-reason">${e(item.reasons?.join(' · ') || 'Mesma categoria')}</p>` : ''}
+    </div><div class="mural-state">${badge(item.status,item.status === 'open' ? 'Disponível' : statusText[item.status])}
+      ${item.status !== 'returned' ? `<small>${item.custody === 'campus' ? 'No setor' : 'Com quem encontrou'}</small>` : ''}</div>
+    <span class="row-arrow">${icon('chev')}</span></a></article>`;
 }
 
-function homeControls(params, filterCount) {
-  return `<h1 class="visually-hidden">${siteName}</h1><div class="search-row">
-    <form id="search-form" class="search-form" role="search">
-      <button class="button search-submit" type="submit" aria-label="Buscar">${icon('search')}</button>
-      <input name="q" type="search" value="${e(params.get('q'))}" aria-label="Buscar por palavra-chave" placeholder="Buscar por palavra-chave" maxlength="120">
-    </form>
-    ${btn('filters',filterCount ? `<span class="count">${filterCount}</span>` : '','filter','filter-square','aria-label="Filtros"')}
-  </div><div class="quick-grid">
-    ${link('/novo/found',`<span class="quick-icon">${icon('plus')}</span><span><strong>Encontrei um item</strong><small>Registrar achado</small></span>`,{ cls:'quick-card found' })}
-    ${link('/novo/lost',`<span class="quick-icon">${icon('search')}</span><span><strong>Perdi um item</strong><small>Registrar perda</small></span>`,{ cls:'quick-card lost' })}
-  </div>`;
+function inboxLinks(counts) {
+  if (!counts) return '';
+  if (counts.unavailable) return `<div class="mural-inbox">${link(contactsPage,'Consultar minhas solicitações',{ cls:'inbox-link',symbol:'bell' })}</div>`;
+  const links = [];
+  if (counts.review) links.push([contactsPage + '&fila=responder',counts.review === 1 ? '1 pedido aguarda sua resposta' : counts.review + ' pedidos aguardam sua resposta']);
+  if (counts.campus) links.push(['/painel/solicitacoes?fila=responder',counts.campus === 1 ? '1 pedido aguarda o setor' : counts.campus + ' pedidos aguardam o setor']);
+  if (counts.pickup) links.push([contactsPage + '&fila=retirar',counts.pickup === 1 ? 'Combinar a retirada de 1 objeto' : 'Combinar as retiradas de ' + counts.pickup + ' objetos']);
+  return links.length ? `<nav class="mural-inbox" aria-label="Minhas pendências">${links.map(([path,label]) =>
+    link(path,label + icon('chev'),{ cls:'inbox-link',symbol:'bell' })).join('')}</nav>` : '';
 }
 
 async function home(url, token) {
-  const data = await api(`/items${url.search}`);
+  const [data,counts] = await Promise.all([api(`/items${url.search}`),
+    session.user ? api('/contacts/summary').catch(error => error.status === 401 ? null : { unavailable:true }) : null]);
   if (token !== navigation) return;
-  const category = url.searchParams.get('category') || '';
-  const filterCount = ['category','status','location','from','to'].filter(key => url.searchParams.has(key)).length;
-  const filtered = filterCount || url.searchParams.has('q');
-  const chips = [['','Todos'], ...session.categories.map(cat => [cat.id,cat.name])].map(([value,label]) =>
-    link(withQuery(url.pathname + url.search,'category',value),e(label),{ cls:`chip ${value === category ? 'on' : ''}`,attrs:value === category ? 'aria-current="true"' : '' })).join('');
-  site.innerHTML = shell(`${homeControls(url.searchParams,filterCount)}<section class="results" aria-labelledby="results-heading">
-    <div class="chips" aria-label="Categorias">${chips}</div>
-    <div class="section-head"><h2 id="results-heading">${filtered ? 'Resultados da busca' : 'Itens encontrados recentemente'}</h2>
-      ${filtered ? link('/','Ver todos',{ cls:'text-link' }) : ''}</div>
-    ${data.items.length ? `<div class="item-grid">${data.items.map(card).join('')}</div>${pager(url.pathname + url.search,data)}`
-      : empty('Nenhum item encontrado',filtered ? 'Tente outro termo ou ajuste os filtros da busca.' : 'Os objetos registrados vão aparecer aqui.',
-        '','search')}</section>`,{ home:true });
+  const params = url.searchParams;
+  const path = url.pathname + url.search;
+  const labels = {
+    q:params.get('q'), category:session.categories.find(cat => cat.id === params.get('category'))?.name || params.get('category'),
+    location:params.get('location'), custody:params.get('custody') === 'campus' ? 'No setor' : 'Com quem encontrou',
+    status:statusText[params.get('status')], from:'A partir de ' + niceDate(params.get('from')), to:'Até ' + niceDate(params.get('to'))
+  };
+  const active = Object.keys(labels).filter(key => params.get(key));
+  const lossPath = lossFormPath(params);
+  const heading = active.length ? 'Resultados da busca' : 'Últimos achados';
+  const emptyResults = `<div class="mural-empty"><span class="empty-symbol">${icon(active.length ? 'search' : 'tag')}</span><div>
+    <h3>${active.length ? 'Seu objeto não apareceu?' : 'Ainda não há objetos no mural'}</h3>
+    <p>${active.length ? 'Registre a perda para comparar com novos objetos encontrados.' : 'Se perdeu algo no campus, já pode deixar um registro privado.'}</p>
+    ${link(lossPath,'Registrar minha perda ' + icon('arrow'),{ cls:'text-link' })}</div></div>`;
+  site.innerHTML = shell(`<header class="mural-heading"><div><h1>Mural de achados</h1>
+    <p>Procure pelo objeto e veja com quem ele está.</p></div><div class="mural-actions">
+    ${link('/novo/found','Encontrei um objeto',{ cls:'button primary',symbol:'plus' })}
+    ${link(lossPath,'Registrar uma perda',{ cls:'button secondary',symbol:'edit' })}</div></header>
+    ${inboxLinks(counts)}<div class="mural-layout"><section class="mural-list" aria-labelledby="results-heading">
+    <div class="mural-tools"><form id="search-form" class="mural-search" role="search">${icon('search')}
+    <input name="q" type="search" value="${e(params.get('q'))}" maxlength="120" aria-label="Buscar objeto" placeholder="Nome, cor ou local do objeto">
+    <button type="submit">Buscar</button></form>${btn('filters','Filtros','filter','secondary')}</div>
+    ${active.length ? `<div class="active-filters">${active.map(key => link(withQuery(path,key,''),e(labels[key]) + icon('x'),{
+      cls:'active-filter',attrs:`aria-label="Remover filtro ${e(labels[key])}"` })).join('')}${link('/','Limpar busca',{ cls:'text-link' })}</div>` : ''}
+    <div class="mural-section"><h2 id="results-heading">${heading}</h2><span>${data.total} ${data.total === 1 ? 'objeto' : 'objetos'}</span></div>
+    ${data.items.length ? '<div class="mural-rows">' + data.items.map(item => card(item)).join('') + '</div>' : emptyResults}
+    ${pager(path,data)}</section><aside class="mural-desk"><div class="desk-heading">${icon('building')}<h2>Retirada no campus</h2></div>
+    ${session.sector.location ? `<p class="desk-location">${e(session.sector.location)}</p>` : ''}
+    ${session.sector.hours ? `<p class="desk-hours">${rowInfo('calendar',session.sector.hours)}</p>` : ''}
+    <p>Encontrou seu objeto no mural? Abra a ficha e informe um detalhe que comprove que ele é seu.</p>
+    ${link('/?custody=campus&status=open','Ver objetos no setor ' + icon('arrow'),{ cls:'desk-link' })}</aside></div>`,{ home:true });
   onForm('#search-form', ({ q }) => {
     go(withQuery(url.pathname + url.search, 'q', q.trim()), { keepScroll: true });
   });
@@ -214,10 +236,11 @@ actions.filters = () => {
   modal('Filtrar itens', `<form class="stack" id="filters-form">
     ${select('Categoria','category',categoryOptions('Todas as categorias'),params.get('category') || '')}
     ${select('Status','status',[['','Todos os status'], ...displayStatus()],params.get('status') || '')}
+    ${select('Com quem está','custody',[['','Qualquer responsável'],['campus','No setor'],['finder','Com quem encontrou']],params.get('custody') || '')}
     ${input('Local','location',params.get('location'),'list="locations" placeholder="Ex.: Biblioteca" maxlength="120"')}<datalist id="locations">${locationOptions()}</datalist>
     <div class="form-grid">${input('A partir de','from',params.get('from'),`type="date" max="${today()}"`)}
     ${input('Até','to',params.get('to'),`type="date" max="${today()}"`)}</div>
-    <div class="form-error" role="alert"></div><div class="form-actions">${link('/','Limpar filtros')}${submit('Aplicar filtros')}</div></form>`);
+    <div class="form-error" role="alert"></div><div class="form-actions">${link(withQuery('/','q',params.get('q')),'Limpar filtros')}${submit('Aplicar filtros')}</div></form>`);
   onForm('#filters-form', data => {
     if (data.from && data.to && data.from > data.to) throw new Error('A data inicial precisa vir antes da data final.');
     let path = location.pathname + location.search;
@@ -234,8 +257,7 @@ function needUser(path) {
 }
 
 function authNext(url) {
-  const next = url.searchParams.get('next');
-  return next && /^\/(?:item\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|perfil|configurar-admin|painel(?:\/[a-z]+)?)$/.test(next) ? next : '';
+  return safePath(url.searchParams.get('next'),'');
 }
 
 function authPage(path, url) {
@@ -258,7 +280,7 @@ function authPage(path, url) {
   site.innerHTML = shell(`<section class="auth-wrap panel"><div class="auth-titlebar">
     ${link(login ? '/' : `/entrar${target}`,'',{ cls:'button secondary auth-back',symbol:'back',attrs:'aria-label="Voltar"' })}
     <span>${title}</span></div><div class="auth-form">
-    <div class="form-heading">${login ? `<span class="auth-icon">${icon('box')}</span>` : ''}
+    <div class="form-heading">${login ? `<span class="auth-icon">${icon('tag')}</span>` : ''}
       <h1>${login ? siteName : title}</h1>${login && session.campus ? `<small class="campus-name">${e(session.campus)}</small>` : ''}<p>${description}</p></div>
     ${unavailable ? `<div class="notice">A recuperação automática por e-mail ainda não está disponível. Procure o setor de Achados e Perdidos.</div>${link('/entrar','Voltar para o login')}` :
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
@@ -296,6 +318,15 @@ function authPage(path, url) {
 async function detail(itemId, token) {
   const { item } = await api(`/items/${itemId}`);
   if (token !== navigation) return;
+  document.title = item.title + ' · ' + siteName;
+  if (item.kind === 'lost' && item.isMine) return ownLossPage(item,token);
+  const sourceId = new URLSearchParams(location.search).get('perda');
+  let sourceLoss;
+  if (sourceId && session.user && item.kind === 'found') {
+    const { losses } = await api(`/items/${item.id}/claim-options`);
+    sourceLoss = losses.find(loss => loss.id === sourceId);
+    if (token !== navigation) return;
+  }
   const own = item.isMine;
   const active = ['open','reserved'].includes(item.status);
   const photoList = item.photos.map((src,index) => `<button type="button" class="thumb" data-action="gallery" data-index="${index}" aria-label="Ampliar foto ${index + 1}"><img src="${e(src)}" alt=""></button>`).join('');
@@ -303,29 +334,60 @@ async function detail(itemId, token) {
   let action = '';
   if (item.kind === 'found' && active && !own) {
     if (status === 'pending' || status === 'approved') action = link(contactPath(item),'Acompanhar solicitação',{ cls:'button primary',symbol:'bell' });
-    else if (session.user) action = btn('claim','Acho que este item é meu','target','primary');
-    else action = link(nextQS(itemHref(item.id)),'Entrar para solicitar contato',{ cls:'button primary',symbol:'lock' });
+    else if (session.user && (!sourceId || sourceLoss)) action = btn('claim','Reconheci este objeto','target','primary');
+    else if (!session.user) action = link(nextQS(location.pathname + location.search),'Entrar para pedir devolução',{ cls:'button primary',symbol:'lock' });
+    else action = link(itemHref(item.id),'Abrir ficha no mural');
   }
   const recordsPath = item.kind === 'lost' ? '/meus-registros?aba=perdi' : '/meus-registros';
   if (own || item.canRate) action += link(recordsPath,'Ver meus registros',{ cls:'button secondary',symbol:'list' });
   if (item.canRate && !item.rating) action += btn('rate-current','Avaliar devolução','star','secondary');
   if (item.canManage && active) action += btn('qr-current','Gerar etiqueta QR','qr','secondary');
-  site.innerHTML = shell(`<div class="back-row">${link(item.kind === 'lost' ? recordsPath : '/',item.kind === 'lost' ? 'Meus registros' : 'Voltar aos itens',{ cls:'text-link',symbol:'back' })}</div>
+  site.innerHTML = shell(`<div class="back-row">${link(sourceLoss ? itemHref(sourceLoss.id) : item.kind === 'lost' ? recordsPath : '/',
+    sourceLoss ? 'Voltar à minha perda' : item.kind === 'lost' ? 'Meus registros' : 'Voltar ao mural',{ cls:'text-link',symbol:'back' })}</div>
     <div class="detail-grid"><div class="gallery panel"><div class="gallery-main ${item.photos[0] ? '' : 'no-picture'}">
     ${item.photos[0] ? `<button type="button" data-action="gallery" data-index="0" aria-label="Ampliar foto do objeto"><img src="${e(item.photos[0])}" alt="${e(item.title)}"></button>` : cover(item)}</div>
     ${item.photos.length > 1 ? `<div class="thumbnails">${photoList}</div>` : ''}</div>
     <section class="detail-content"><div class="detail-tags"><span class="item-category">${e(item.category)}</span>${badge(item.status)}</div>
     <h1>${e(item.title)}</h1><p class="description">${e(item.description)}</p>
-    <dl class="details-list"><div><dt>${icon('pin')} Local</dt><dd>${e(item.location || 'Não informado')}</dd></div>
+    <dl class="details-list"><div><dt>${icon('pin')} ${item.kind === 'found' ? 'Local do achado' : 'Local da perda'}</dt><dd>${e(item.location || 'Não informado')}</dd></div>
       <div><dt>${icon('calendar')} ${item.kind === 'found' ? 'Encontrado em' : 'Perdido por volta de'}</dt><dd>${niceDate(item.occurredOn)}</dd></div>
       ${item.custody ? `<div><dt>${icon('box')} Guarda</dt><dd>${e(custodyText[item.custody])}</dd></div>` : ''}
+      ${active && item.custody === 'campus' && session.sector.location ? `<div><dt>${icon('building')} Ponto de retirada</dt><dd>${e(session.sector.location)}</dd></div>` : ''}
+      ${active && item.custody === 'campus' && session.sector.hours ? `<div><dt>${icon('calendar')} Atendimento</dt><dd>${e(session.sector.hours)}</dd></div>` : ''}
       ${item.returnedOn ? `<div><dt>${icon('check')} Devolução</dt><dd>${niceDate(item.returnedOn)}</dd></div>` : ''}</dl>
+    ${sourceLoss ? `<p class="loss-context">Comparando com sua perda <strong>${e(sourceLoss.title)}</strong></p>` : sourceId && session.user ? '<p class="loss-context">A perda selecionada já foi encerrada ou está indisponível.</p>' : ''}
     <div class="detail-actions">${action}${item.kind === 'found' && item.publication === 'public' ? btn('share','Compartilhar','share','secondary') : ''}</div>
     ${item.kind === 'found' && active && !own && !status ? '<p class="hint">Informe uma característica que só a pessoa dona do objeto saberia. O responsável revisará seu pedido.</p>' : ''}</section></div>`);
   actions.gallery = button => showGallery(item,Number(button.dataset.index));
-  actions.claim = () => claim(item);
+  actions.claim = () => claim(item,sourceLoss);
   actions['rate-current'] = () => rate(item.id);
   actions['qr-current'] = () => qrLabel(item);
+}
+
+async function ownLossPage(item, token) {
+  const open = item.status === 'open' && !item.archivedAt;
+  const { items } = open ? await api(`/items/${item.id}/matches`) : { items:[] };
+  if (token !== navigation) return;
+  const matches = items.length ? `<div class="mural-rows">${items.map(found => card(found,item.id)).join('')}</div>` :
+    '<p class="loss-empty">Ainda não há achados compatíveis. Volte a esta ficha para conferir os próximos objetos publicados.</p>';
+  const photos = item.photos.map((src,index) => `<button class="thumb" type="button" data-action="gallery" data-index="${index}" aria-label="Ampliar foto ${index + 1}"><img src="${e(src)}" alt=""></button>`).join('');
+  site.innerHTML = shell(`<div class="loss-page"><div class="back-row">${link('/meus-registros?aba=perdi','Minhas perdas',{ cls:'text-link',symbol:'back' })}</div>
+    <header class="loss-heading"><div class="record-tags">${item.archivedAt ? badge('archived','Arquivado') : badge(item.status,open ? 'Em busca' : 'Recuperado')}<span class="private-label">${icon('lock')} Perda privada</span></div>
+      <h1>${e(item.title)}</h1><p class="description">${e(item.description)}</p>
+      <div class="inline-meta">${rowInfo('tag',item.category)}${item.location ? rowInfo('pin',item.location) : ''}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
+      ${photos ? `<div class="thumbnails">${photos}</div>` : ''}</header>
+    <div class="loss-tools">${link(contactPath(item),item.contactCount ? 'Acompanhar solicitações (' + item.contactCount + ')' : 'Histórico de solicitações',{ cls:'text-link',symbol:'list' })}
+    ${item.canResolve ? btn('resolve-loss','Já recuperei meu objeto','check','secondary') : ''}</div>
+    ${open ? `<section class="loss-matches"><h2>Possíveis achados</h2>${items.length ? '<p>Compare a foto, o local e a data antes de pedir a devolução.</p>' : ''}${matches}</section>` :
+      item.archivedAt && item.status === 'open' ? '<p class="loss-empty">Este registro foi arquivado.</p>' :
+      `<section class="loss-matches"><h2>Perda encerrada</h2>${item.recoveredItemId ? link(itemHref(item.recoveredItemId),'Ver objeto devolvido',{ cls:'text-link',symbol:'check' }) : '<p>Você informou que recuperou este objeto por conta própria.</p>'}</section>`}
+    </div>`);
+  actions.gallery = button => showGallery(item,Number(button.dataset.index));
+  actions['resolve-loss'] = () => confirmAction('Já recuperou este objeto?',`A perda de “${item.title}” ficará como recuperada no seu histórico.`,async () => {
+    await api(`/mine/${item.id}/resolve`,{ method:'POST',body:{ updatedAt:item.updatedAt } });
+    notify('Perda encerrada.');
+    go(itemHref(item.id),{ keepScroll:true });
+  },'Sim, já recuperei');
 }
 
 function showGallery(item, index) {
@@ -347,20 +409,31 @@ function showGallery(item, index) {
 }
 
 actions.share = async () => {
+  const url = location.origin + location.pathname;
   if (navigator.share) {
-    try { await navigator.share({ title:document.title,url:location.href }); return; }
+    try { await navigator.share({ title:document.title,url }); return; }
     catch (error) { if (error.name === 'AbortError') return; }
   }
-  try { await navigator.clipboard.writeText(location.href); notify('Link copiado.'); }
-  catch { modal('Compartilhar item', `<label>Link do item<input readonly value="${e(location.href)}"></label>`); }
+  try { await navigator.clipboard.writeText(url); notify('Link copiado.'); }
+  catch { modal('Compartilhar item', `<label>Link do item<input readonly value="${e(url)}"></label>`); }
 };
 
-function claim(item, lostId) {
+async function claim(item, sourceLoss) {
+  if (!session.user?.phone) {
+    modal('Complete seu perfil',`<p>Informe seu telefone para que o responsável possa combinar a entrega após aprovar o pedido.</p>
+      ${link('/perfil?next=' + encodeURIComponent(location.pathname + location.search),'Informar telefone',{ cls:'button primary' })}`);
+    return;
+  }
+  const at = navigation;
+  const { losses } = sourceLoss ? { losses:[] } : await api(`/items/${item.id}/claim-options`);
+  if (at !== navigation) return;
   modal('Solicitar devolução', `<p>Descreva um detalhe que ajude a confirmar que “${e(item.title)}” é seu. Após a aprovação, quem está com o objeto pode entrar em contato pelo WhatsApp para combinar a entrega.</p>
-    <form class="stack" id="claim-form">${textarea('Como reconhecer seu objeto?','message','','required minlength="10" maxlength="700" rows="4" placeholder="Ex.: detalhe da capa, marca de uso ou conteúdo…"')}
+    <form class="stack" id="claim-form">${sourceLoss ? `<p class="loss-context">Perda vinculada <strong>${e(sourceLoss.title)}</strong></p>` :
+      losses.length ? select('Vincular a uma perda minha','loss',[['','Selecione uma opção'],...losses.map(loss => [loss.id,loss.title + ' · ' + niceDate(loss.occurredOn)]),['new','Ainda não registrei esta perda']],losses.length === 1 ? losses[0].id : '','required') : ''}
+    ${textarea('Como reconhecer seu objeto?','message','','required minlength="10" maxlength="700" rows="4" placeholder="Ex.: detalhe da capa, marca de uso ou conteúdo…"')}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Enviar solicitação','arrow')}</div></form>`);
   onForm('#claim-form', async data => {
-    await api(`/items/${item.id}/contact`,{ method:'POST',body:{ ...data,lostId } });
+    await api(`/items/${item.id}/contact`,{ method:'POST',body:{ message:data.message,lostId:sourceLoss?.id || (data.loss === 'new' ? undefined : data.loss) } });
     notify('Solicitação enviada.');
     go(contactPath(item));
   });
@@ -413,28 +486,35 @@ function loadDraft(kind) {
   catch { return {}; }
 }
 
-function itemForm(kind) {
+function itemForm(kind, url) {
   const found = kind === 'found';
-  if (!needUser(`/novo/${kind}`)) return;
+  const path = url.pathname + url.search;
+  if (!needUser(path)) return;
   if (!session.user.phone) {
     site.innerHTML = shell(empty('Complete seu perfil','Informe seu telefone antes de registrar um objeto.',
-      link('/perfil','Editar perfil',{ cls:'button primary' }),'user'));
+      link('/perfil?next=' + encodeURIComponent(path),'Editar perfil',{ cls:'button primary' }),'user'));
     return;
   }
-  const draft = loadDraft(kind);
+  const saved = loadDraft(kind);
+  const params = url.searchParams;
+  const prefill = found ? {} : { title:(params.get('objeto') || '').slice(0,90), location:(params.get('local') || '').slice(0,120),
+    categoryId:session.categories.find(cat => cat.id === params.get('categoria'))?.id || '' };
+  const draft = { ...prefill,...saved };
+  const fromSearch = !found && Object.values(prefill).some(Boolean);
   if (!photoDraft || photoDraft.key !== draftKey(kind)) clearPhotoDraft(kind);
   site.innerHTML = shell(`<div class="back-row">${link('/novo','Tipo de registro',{ cls:'text-link',symbol:'back' })}</div>
     ${header(found ? 'Encontrei um item' : 'Registrar uma perda',found
       ? 'Ajude quem perdeu a reconhecer o objeto e encontrar o caminho para recuperá-lo.'
       : 'Guarde os detalhes da perda e consulte itens encontrados que podem corresponder.')}
-    <div class="edit-grid"><form class="panel editor stack" id="item-form"><div class="form-heading"><h2>Informações do objeto</h2><p>${found ? 'A foto e o local ajudam a reconhecer o item.' : 'Você pode incluir uma foto para facilitar a identificação.'}</p></div>
+    <div class="edit-grid"><form class="panel editor stack" id="item-form"><div class="form-heading"><h2>Informações do objeto</h2><p>${Object.keys(saved).length ? 'Retomamos seu rascunho nesta aba.' : fromSearch ? 'Trouxemos os dados da sua busca. Confira e complete o que falta.' : found ? 'A foto e o local ajudam a reconhecer o item.' : 'Descreva o que perdeu e onde lembra de ter visto o objeto.'}</p></div>
+      ${found ? '' : itemFields(kind,draft)}
       <section class="upload-section"><div class="field-title">${found ? 'Fotos do item' : 'Fotos opcionais'} <span id="photo-total"></span></div>
       <div class="photo-previews" id="photo-previews"></div><div class="upload-actions">
         <label class="button secondary upload-button">${icon('image')}Adicionar foto<input type="file" id="photo-files" accept="image/*" multiple></label>
         <label class="button secondary upload-button">${icon('camera')}Usar câmera<input type="file" id="photo-camera" accept="image/*" capture="environment"></label></div>
       ${session.features.suggestions ? `<div class="suggest"><button type="button" class="text-link" data-action="suggest">${icon('spark')}Sugerir categoria pela foto</button></div>` : ''}
       <p class="hint">${found ? 'De uma a três fotos.' : 'Até três fotos.'} Evite mostrar documentos, números ou rostos.</p></section>
-      ${itemFields(kind,draft)}
+      ${found ? itemFields(kind,draft) : ''}
       ${found ? `<fieldset class="custody"><legend>Com quem o item está?</legend>
         <label class="choice-option"><input type="radio" name="custody" value="finder" ${checked(draft.custody !== 'campus')}>${icon('user')}<span><b>Está comigo</b><small>Eu combino a entrega com quem perdeu.</small></span></label>
         <label class="choice-option"><input type="radio" name="custody" value="campus" ${checked(draft.custody === 'campus')}>${icon('building')}<span><b>Entreguei no setor</b><small>O setor confirma a retirada.</small></span></label></fieldset>` :
@@ -609,7 +689,7 @@ function recordCard(item) {
     controls.push(btn('transfer','Entreguei no setor','building','secondary',key));
     controls.push(btn('return-record','Registrar devolução','check','primary',key));
   }
-  if (!found && active) controls.push(btn('matches','Ver itens compatíveis','search','secondary',key));
+  if (!found && active) controls.push(link(itemHref(item.id),'Comparar achados',{ symbol:'search' }));
   if (!archived && !found && item.recoveredItemId) controls.push(link(itemHref(item.recoveredItemId),'Ver devolução',{ symbol:'check' }));
   if (found && active && item.custody === 'finder' && mine) controls.push(btn('qr-record','Etiqueta QR','qr','secondary',key));
   if (item.contactCount && (!found || item.custody === 'finder') && active) controls.push(link(contactPath(item),`${item.contactCount} solicitaç${item.contactCount === 1 ? 'ão' : 'ões'}`,{ cls:'button secondary',symbol:'bell' }));
@@ -628,7 +708,7 @@ function recordCard(item) {
       ${!archived && found && item.publication !== 'public' ? badge(item.publication) : ''}
       <span class="item-category">${e(item.category)}</span></div>
       <h3>${archived ? e(item.title) : link(itemHref(item.id),e(item.title),{ cls:'record-title' })}</h3>
-      <div class="inline-meta">${rowInfo('calendar',niceDate(archived ? item.archivedAt : item.occurredOn))}${item.custody ? rowInfo('box',custodyText[item.custody]) : ''}</div>
+      <div class="inline-meta">${rowInfo('calendar',niceDate(archived ? item.archivedAt : item.occurredOn))}${item.location ? rowInfo('pin',item.location) : ''}${item.custody ? rowInfo('box',custodyText[item.custody]) : ''}</div>
       ${controls.length ? `<div class="record-actions">${controls.join('')}</div>` : ''}</div></article>`;
 }
 
@@ -645,12 +725,13 @@ async function records(url, token) {
   let rows = [];
   if (tab === 'contacts') {
     const query = new URLSearchParams({ page:url.searchParams.get('page') || '1' });
-    for (const key of ['item','lost']) if (url.searchParams.has(key)) query.set(key,url.searchParams.get(key));
+    for (const key of ['item','lost','fila']) if (url.searchParams.has(key)) query.set(key,url.searchParams.get(key));
     const data = await api(`/contacts?${query}`);
     rows = data.contacts;
-    const filtered = query.has('item') || query.has('lost');
+    const filtered = query.has('item') || query.has('lost') || query.has('fila');
     const back = filtered ? `<div class="back-row">${link(contactsPage,'Ver todas as solicitações',{ cls:'text-link',symbol:'back' })}</div>` : '';
-    content = back + contactCards(rows) + pager(path,data);
+    const heading = query.has('fila') ? `<h2 class="queue-heading">${query.get('fila') === 'responder' ? 'Pedidos para responder' : 'Retiradas para combinar'}</h2>` : '';
+    content = back + heading + contactCards(rows) + pager(path,data);
   } else if (tab === 'ratings') {
     const [data, deliveries] = await Promise.all([api('/ratings'),api('/returns')]);
     const pending = deliveries.items.filter(item => !item.rating);
@@ -701,16 +782,6 @@ actions.transfer = button => {
   const item = button.dataset.id;
   confirmAction('Entregou o objeto ao setor?','O setor ficará responsável por analisar solicitações e registrar a devolução.',
     async () => { await api(`/items/${item}/transfer`,{ method:'POST',body:{} }); notify('Guarda atualizada.'); go(location.pathname + location.search); },'Confirmar entrega ao setor');
-};
-
-actions.matches = async button => {
-  const lostId = button.dataset.id;
-  const { items } = await api(`/items/${lostId}/matches`);
-  modal('Itens que podem corresponder', items.length ? `<div class="stack">${items.map(item =>
-    `<div class="match-row"><div><strong>${e(item.title)}</strong><p>${e(item.location)} · ${niceDate(item.occurredOn)}</p></div>
-    ${btn('claim-match','Solicitar','target','secondary',`data-id="${item.id}"`)}</div>`).join('')}</div>` :
-    empty('Nenhum item compatível','Volte mais tarde para conferir novos itens da mesma categoria.','','search'));
-  actions['claim-match'] = control => claim(items.find(item => item.id === control.dataset.id),lostId);
 };
 
 function contactCards(contacts) {
@@ -782,7 +853,7 @@ function rate(id) {
 }
 
 function profilePage(url) {
-  if (!needUser('/perfil')) return;
+  if (!needUser(url.pathname + url.search)) return;
   const user = session.user;
   const institutional = url.searchParams.get('institucional');
   site.innerHTML = shell(`${header('Minha conta','Gerencie seus dados e seu acesso ao sistema.')}
@@ -802,7 +873,7 @@ function profilePage(url) {
   onForm('#profile-form',async data => {
     session.user = (await api('/profile',{ method:'PATCH',body:data })).user;
     notify('Dados salvos.');
-    go('/perfil',{ replace:true });
+    go(authNext(url) || '/perfil',{ replace:true });
   });
 }
 
@@ -880,10 +951,12 @@ async function adminPage(url, token) {
   if (path === '/painel/usuarios') return usersPage(url,token);
   if (path === '/painel/solicitacoes') {
     const query = new URLSearchParams({ scope:'campus',page:url.searchParams.get('page') || '1' });
+    if (url.searchParams.get('fila') === 'responder') query.set('fila','responder');
     const data = await api(`/contacts?${query}`);
     const { contacts } = data;
     if (token !== navigation) return;
-    site.innerHTML = adminShell(`${header('Solicitações','Revise os pedidos para objetos guardados no setor.')}${contactCards(contacts)}${pager(path + url.search,data)}`,path);
+    site.innerHTML = adminShell(`${header(query.has('fila') ? 'Pedidos para responder' : 'Solicitações','Revise os pedidos para objetos guardados no setor.',
+      query.has('fila') ? link(path,'Todas as solicitações') : '')}${contactCards(contacts)}${pager(path + url.search,data)}`,path);
     bindContactActions(contacts);
     return;
   }
@@ -1107,7 +1180,7 @@ async function render() {
   try {
     if (path === '/') return await home(url,token);
     if (path === '/novo') return newChoice();
-    if (path === '/novo/found' || path === '/novo/lost') return itemForm(path.slice(6));
+    if (path === '/novo/found' || path === '/novo/lost') return itemForm(path.slice(6),url);
     if (path.startsWith('/item/')) return await detail(encodeURIComponent(path.slice(6)),token);
     if (path === '/meus-registros') return await records(url,token);
     if (path === '/perfil') return profilePage(url);
@@ -1121,7 +1194,7 @@ async function render() {
     if (error.status === 401 && session.user) {
       session.user = null;
       clearPhotoDraft();
-      go(nextQS(path),{ replace:true });
+      go(nextQS(path + url.search),{ replace:true });
       return;
     }
     site.innerHTML = shell(empty(error.status === 404 ? 'Registro não encontrado' : 'Não foi possível carregar a página',
@@ -1153,7 +1226,7 @@ document.addEventListener('click', async event => {
     if (error.status === 401) {
       session.user = null;
       clearPhotoDraft();
-      go(nextQS(location.pathname),{ replace:true });
+      go(nextQS(location.pathname + location.search),{ replace:true });
     } else notify(error.message);
   }
 });
