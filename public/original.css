@@ -137,3 +137,6 @@ a.item-card, .quick-card, .nav-item, .btn, .chip, .login-pill, .icon-btn, .whats
 .prototype-sheet .chip:has(:checked) {background:var(--red);color:white;}
 .prototype-sheet .chip:focus-within {outline:2px solid var(--navy);}
 .mobile-shell .tabs .tab {flex:1;text-align:center;text-decoration:none;border-radius:8px;padding:8px 5px;}
+
+.contact-gate:has(.guest-whatsapp) {grid-template-columns:36px 1fr;align-content:center;}
+.contact-gate .guest-whatsapp {grid-column:1/-1;display:flex;text-decoration:none;}

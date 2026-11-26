@@ -290,12 +290,6 @@ async function detail(itemId, token) {
   document.title = item.title + ' · ' + siteName;
   if (item.kind === 'lost' && item.isMine) return ownLossPage(item,token);
   const sourceId = new URLSearchParams(location.search).get('perda');
-  let sourceLoss;
-  if (sourceId && session.user && item.kind === 'found') {
-    const { losses } = await api(`/items/${item.id}/claim-options`);
-    sourceLoss = losses.find(loss => loss.id === sourceId);
-    if (token !== navigation) return;
-  }
   const mine=item.isMine, active=['open','reserved'].includes(item.status);
   const info=(symbol,label,value)=>`<div class="info-row">${icon(symbol)}<div><span>${label}</span><b>${e(value)}</b></div></div>`;
   const whatsappButton=btn('start-whatsapp',item.reservedForMe?'Abrir conversa novamente':'Entrar em contato pelo WhatsApp','whatsapp','whatsapp-btn');
@@ -304,7 +298,7 @@ async function detail(itemId, token) {
   else if(mine) contact=`<h3>Gerenciar meu registro</h3><p>${item.custody==='campus'?'O setor da Fatec registra a devolução.':'O item está com você.'}</p>${link(contactPath(item),'Ver solicitações',{cls:'btn secondary full'})}${item.custody==='finder'?btn('direct-handover','Registrar devolução manualmente','check','btn full'):''}`;
   else if(!session.user) contact=`<div class="contact-head"><div><h3>Entrar em contato</h3><span>O contato é protegido por login.</span></div><span class="secure-chip">${icon('lock')} Protegido</span></div>
     <div class="locked-contact-v2"><div class="contact-preview-blur" aria-hidden="true"><div class="contact-owner">Responsável pelo item</div><div class="whatsapp-btn">${icon('whatsapp')} Entrar em contato pelo WhatsApp</div></div>
-    <div class="contact-gate"><div class="lock-circle">${icon('lock')}</div><div><b>Faça login para continuar</b><span>Entre para conversar com o responsável pelo WhatsApp.</span></div>${link(nextQS(location.pathname+location.search),'Entrar',{cls:'btn sm',attrs:'aria-label="Entrar para abrir o WhatsApp"'})}</div></div>`;
+    <div class="contact-gate"><div class="lock-circle">${icon('lock')}</div><div><b>Faça login para continuar</b><span>Entre para conversar com o responsável pelo WhatsApp.</span></div>${link(nextQS(location.pathname+location.search),'Entrar em contato pelo WhatsApp',{cls:'whatsapp-btn guest-whatsapp',symbol:'whatsapp'})}</div></div>`;
   else if(item.status==='reserved'&&!item.reservedForMe)contact='<h3>Item reservado</h3><p>Outro possível proprietário já está combinando a devolução.</p>';
   else contact=`<div class="contact-head"><div><h3>${item.reservedForMe?'Contato em andamento':'Entrar em contato'}</h3><span>Ao abrir o WhatsApp, sua solicitação fica registrada.</span></div></div>
     <div class="contact-owner"><div class="avatar">${e(initial(item.contactName))}</div><div><b>${e(item.contactName)}</b><span>${item.custody==='campus'?'Setor responsável pela guarda':'Pessoa que encontrou o item'}</span></div></div>${whatsappButton}<p id="contact-error" role="alert"></p>`;
@@ -317,7 +311,7 @@ async function detail(itemId, token) {
   actions['start-whatsapp']=async button=>{
     button.disabled=true;
     try {
-      const {url}=await api('/items/'+item.id+'/whatsapp',{method:'POST',body:{lostId:sourceLoss?.id}});
+      const {url}=await api('/items/'+item.id+'/whatsapp',{method:'POST',body:{lostId:sourceId || undefined}});
       location.assign(url);
     } catch(error) {const feedback=qs('#contact-error');if(feedback)feedback.textContent=error.message;}
     finally {button.disabled=false;}
