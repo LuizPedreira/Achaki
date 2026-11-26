@@ -16,6 +16,7 @@ const routes = [
   ['POST', /^\/items\/([^/]+)\/transfer$/, ({ env,user }, id) => items.transferToCampus(env,user,id)],
   ['GET', /^\/items\/([^/]+)\/matches$/, ({ env,user }, id) => items.listMatches(env,user,id)],
   ['GET', /^\/items\/([^/]+)\/claim-options$/, ({ env,user }, id) => items.claimOptions(env,user,id)],
+  ['POST', /^\/items\/([^/]+)\/whatsapp$/, ({env,user,body},id) => requests.whatsapp(env,user,id,body)],
   ['POST', /^\/items\/([^/]+)\/contact$/, ({ env,user,body }, id) => requests.requestContact(env,user,id,body)],
   ['GET', /^\/items\/([^/]+)\/receipt$/, ({ env,user }, id) => requests.receipt(env,user,id)],
   ['POST', /^\/items\/([^/]+)\/return$/, ({ env,user,body }, id) => requests.returnItem(env,user,id,body)],
@@ -60,7 +61,7 @@ const routes = [
 ];
 
 const htmlRoute = /^\/(?:(?:item|comprovante)\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|entrar|cadastro|recuperar-senha|redefinir-senha|configurar-admin|perfil|ajuda|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?\/?$/i;
-const assetRoute = /^\/(?:app\.js|icons\.js|navigation\.js|styles\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
+const assetRoute = /^\/(?:app\.js|icons\.js|navigation\.js|styles\.css|original\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
 
 async function handle(request, env, context) {
   const url = new URL(request.url);

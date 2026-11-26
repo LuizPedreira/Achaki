@@ -89,20 +89,12 @@ function brand() {
     <span>${siteName}${session.campus ? `<small>${e(session.campus)}</small>` : ''}</span></a>`;
 }
 
-function shell(content, { wide = false, auth = false, home = false } = {}) {
-  if (auth) return `<main id="conteudo" tabindex="-1" class="main auth-main">${content}</main>`;
-  const user = session.user;
-  const profile = user ? `<a class="profile-link" data-nav href="/perfil" aria-label="Minha conta"><span class="avatar">${e(initial(user.name))}</span><span>${e(user.name.split(' ')[0])}</span></a>`
-    : link('/entrar','Entrar',{ cls:'button secondary sign-in',symbol:'user' });
-  return `<header class="header"><div class="header-inner">${brand()}<nav class="top-nav" aria-label="Principal">
-    ${entry('/','Mural','home')}${entry('/meus-registros','Meus registros','list')}${entry('/ajuda','Como funciona','help')}
-    ${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : ''}</nav>
-    <div class="header-actions">${profile}${home ? '' : link('/novo','Registrar item',{ cls:'button primary header-cta',symbol:'plus' })}</div></div></header>
-    <main id="conteudo" tabindex="-1" class="main${wide ? ' admin-main' : home ? ' home-main' : ''}">${content}</main>
-    <footer class="footer"><div><small>Projeto acadêmico${session.campus ? ` · ${e(session.campus)}` : ''}</small></div>
-      <div>${link('/ajuda','Como funciona',{ cls:'text-link' })}<button type="button" class="text-link install-link" data-action="install" ${installPrompt ? '' : 'hidden'}>Instalar aplicativo</button></div></footer>
-    <nav class="dock" aria-label="Navegação móvel">${entry('/','Mural','home')}${entry('/novo','Registrar','plus')}
-    ${entry('/meus-registros','Registros','list')}${user?.role === 'admin' ? entry('/painel','Painel','dashboard') : entry(user ? '/perfil' : '/entrar',user ? 'Perfil' : 'Entrar','user')}</nav>`;
+function shell(content,{auth=false,home=false,detail=false}={}) {
+  const path=location.pathname;
+  const nav=(href,name,symbol,main=false)=>link(href,(main?`<span class="nav-main">${icon(symbol)}</span>`:icon(symbol))+`<span>${name}</span>`,
+    {cls:'nav-item'+(path===href?' active':''),attrs:path===href?'aria-current="page"':''});
+  const dock=`<nav class="bottom-nav" aria-label="Navegação principal">${nav('/','Início','home')}${nav('/novo/lost','Perdi algo','search')}${nav('/novo/found','Registrar','plus',true)}${nav('/meus-registros','Registros','list')}${nav('/perfil','Perfil','user')}</nav>`;
+  return `<div class="mobile-shell"><main id="conteudo" tabindex="-1" class="mobile-page${auth?' white no-nav':detail?' detail-page no-nav':''}">${content}</main>${auth||detail?'':dock}</div>`;
 }
 
 function header(title, description, actions = '', kicker = '') {
@@ -181,71 +173,43 @@ function card(item, lostId = '') {
     <span class="row-arrow">${icon('chev')}</span></a></article>`;
 }
 
-function inboxLinks(counts) {
-  if (!counts) return '';
-  if (counts.unavailable) return `<div class="mural-inbox">${link(contactsPage,'Consultar minhas solicitações',{ cls:'inbox-link',symbol:'bell' })}</div>`;
-  const links = [];
-  if (counts.review) links.push([contactsPage + '&fila=responder',counts.review === 1 ? '1 pedido aguarda sua resposta' : counts.review + ' pedidos aguardam sua resposta']);
-  if (counts.campus) links.push(['/painel/solicitacoes?fila=responder',counts.campus === 1 ? '1 pedido aguarda o setor' : counts.campus + ' pedidos aguardam o setor']);
-  if (counts.pickup) links.push([contactsPage + '&fila=retirar',counts.pickup === 1 ? 'Acompanhar 1 retirada aprovada' : 'Acompanhar ' + counts.pickup + ' retiradas aprovadas']);
-  if (counts.handoff) links.push([contactsPage + '&fila=entregar',counts.handoff === 1 ? '1 objeto reservado para entregar' : counts.handoff + ' objetos reservados para entregar']);
-  return links.length ? `<nav class="mural-inbox" aria-label="Minhas pendências">${links.map(([path,label]) =>
-    link(path,label + icon('chev'),{ cls:'inbox-link',symbol:'bell' })).join('')}</nav>` : '';
-}
-
-async function home(url, token) {
-  const [data,counts] = await Promise.all([api(`/items${url.search}`),
-    session.user ? api('/contacts/summary').catch(error => error.status === 401 ? null : { unavailable:true }) : null]);
-  if (token !== navigation) return;
-  const params = url.searchParams;
-  const path = url.pathname + url.search;
-  const labels = {
-    q:params.get('q'), category:session.categories.find(cat => cat.id === params.get('category'))?.name || params.get('category'),
-    location:params.get('location'), custody:params.get('custody') === 'campus' ? 'No setor' : 'Com quem encontrou',
-    status:statusText[params.get('status')], from:'A partir de ' + niceDate(params.get('from')), to:'Até ' + niceDate(params.get('to'))
-  };
-  const active = Object.keys(labels).filter(key => params.get(key));
-  const lossPath = lossFormPath(params);
-  const heading = active.length ? 'Resultados da busca' : 'Últimos achados';
-  const emptyResults = `<div class="mural-empty"><span class="empty-symbol">${icon(active.length ? 'search' : 'tag')}</span><div>
-    <h3>${active.length ? 'Seu objeto não apareceu?' : 'Ainda não há objetos no mural'}</h3>
-    <p>${active.length ? 'Registre a perda para comparar com novos objetos encontrados.' : 'Se perdeu algo no campus, já pode deixar um registro privado.'}</p>
-    ${link(lossPath,'Registrar minha perda ' + icon('arrow'),{ cls:'text-link' })}</div></div>`;
-  site.innerHTML = shell(`<header class="mural-heading"><div><h1>Mural de achados</h1>
-    <p>Procure pelo objeto e veja com quem ele está.</p></div><div class="mural-actions">
-    ${link('/novo/found','Encontrei um objeto',{ cls:'button primary',symbol:'plus' })}
-    ${link(lossPath,'Registrar uma perda',{ cls:'button secondary',symbol:'edit' })}</div></header>
-    ${inboxLinks(counts)}<div class="mural-layout"><section class="mural-list" aria-labelledby="results-heading">
-    <div class="mural-tools"><form id="search-form" class="mural-search" role="search">${icon('search')}
-    <input name="q" type="search" value="${e(params.get('q'))}" maxlength="120" aria-label="Buscar objeto" placeholder="Nome, cor ou local do objeto">
-    <button type="submit">Buscar</button></form>${btn('filters','Filtros','filter','secondary')}</div>
-    ${active.length ? `<div class="active-filters">${active.map(key => link(withQuery(path,key,''),e(labels[key]) + icon('x'),{
-      cls:'active-filter',attrs:`aria-label="Remover filtro ${e(labels[key])}"` })).join('')}${link('/','Limpar busca',{ cls:'text-link' })}</div>` : ''}
-    <div class="mural-section"><h2 id="results-heading">${heading}</h2><span>${data.total} ${data.total === 1 ? 'objeto' : 'objetos'}</span></div>
-    ${data.items.length ? '<div class="mural-rows">' + data.items.map(item => card(item)).join('') + '</div>' : emptyResults}
-    ${pager(path,data)}</section><aside class="mural-desk"><div class="desk-heading">${icon('building')}<h2>Retirada no campus</h2></div>
-    ${session.sector.location ? `<p class="desk-location">${e(session.sector.location)}</p>` : ''}
-    ${session.sector.hours ? `<p class="desk-hours">${rowInfo('calendar',session.sector.hours)}</p>` : ''}
-    <p>Encontrou seu objeto no mural? Abra a ficha e informe um detalhe que comprove que ele é seu.</p>
-    ${link('/?custody=campus&status=open','Ver objetos no setor ' + icon('arrow'),{ cls:'desk-link' })}</aside></div>`,{ home:true });
-  onForm('#search-form', ({ q }) => {
-    go(withQuery(url.pathname + url.search, 'q', q.trim()), { keepScroll: true });
-  });
+async function home(url,token) {
+  const params=new URLSearchParams(url.searchParams);
+  params.set('recent','1');
+  const data=await api('/items?'+params);
+  if(token!==navigation)return;
+  const path=url.pathname+url.search,category=url.searchParams.get('category')||'';
+  const person=session.user;
+  const top=person ? `<div class="row"><div class="avatar">${e(initial(person.name))}</div><div class="user-hello"><b>Olá, ${e(person.name.split(' ')[0])}</b><span>Encontrou ou perdeu algo hoje?</span></div></div>${link(person.role==='admin'?'/painel':contactsPage,icon(person.role==='admin'?'dashboard':'bell'),{cls:'icon-btn',attrs:'aria-label="Abrir solicitações ou painel"'})}` :
+    `<div class="brand-mini"><div class="brand-mark">${icon('box')}</div><div><div class="brand-title">Achados &amp; Perdidos</div><div class="brand-sub">${e(session.campus)}</div></div></div>${link('/entrar','Entrar',{cls:'login-pill'})}`;
+  const chips=[{id:'',name:'Todos'},...session.categories.slice(0,4)].map(c=>link(withQuery(path,'category',c.id),e(c.name),{cls:'chip'+(category===c.id?' active':'')})).join('');
+  const rows=data.items.map(i=>link(itemHref(i.id),`<div class="item-photo">${cover(i)}</div><div><div class="row between"><span class="item-kicker">${e(i.category)}</span>${badge(i.status)}</div><div class="item-title">${e(i.title)}</div><div class="item-meta">${icon('pin')} ${e(i.location)} &nbsp; ${icon('calendar')} ${niceDate(i.occurredOn)}</div></div>`,{cls:'item-card'})).join('');
+  site.innerHTML=shell(`<div class="mobile-top">${top}</div><form class="search-row" id="search-form" role="search"><div class="search-box">${icon('search')}<input class="control" name="q" type="search" aria-label="Buscar por palavra-chave" placeholder="Buscar por palavra-chave" value="${e(params.get('q')||'')}"></div>${btn('filters','','filter','filter-square','aria-label="Filtros"')}</form>
+    <div class="quick-grid">${link('/novo/found','<span class="quick-icon">'+icon('plus')+'</span><span><b>Encontrei um item</b><small>Registrar achado</small></span>',{cls:'quick-card red-card'})}
+    ${link('/novo/lost','<span class="quick-icon">'+icon('search')+'</span><span><b>Perdi um item</b><small>Abrir solicitação</small></span>',{cls:'quick-card dark-card'})}</div>
+    <div class="chips">${chips}</div><div class="section-head"><h3>Itens encontrados recentemente</h3>${link('/','Ver todos',{cls:'link'})}</div>
+    <div class="item-list" id="homeItems">${rows||'<div class="empty">Nenhum item encontrado com esses filtros.</div>'}</div>${pager(path,data)}`);
+  const search=qs('#search-form input');
+  let delay;
+  const run=()=>{clearTimeout(delay);go(withQuery(path,'q',search.value.trim()),{keepScroll:true});};
+  search.addEventListener('input',()=>{clearTimeout(delay);delay=setTimeout(()=>{if(search.isConnected)run();},350);});
+  onForm('#search-form',run);
+  if(params.has('q') && document.activeElement===document.body){ search.focus({preventScroll:true}); }
 }
 
 actions.filters = () => {
   const params = new URLSearchParams(location.search);
+  const choices = (name,options) => `<div class="chips">${options.map(([value,label]) => `<label class="chip"><input type="radio" name="${name}" value="${e(value)}" ${checked(value===(params.get(name)||''))}>${e(label)}</label>`).join('')}</div>`;
   modal('Filtrar itens', `<form class="stack" id="filters-form">
-    ${select('Categoria','category',categoryOptions('Todas as categorias'),params.get('category') || '')}
-    ${select('Status','status',[['','Todos os status'], ...displayStatus()],params.get('status') || '')}
-    ${select('Com quem está','custody',[['','Qualquer responsável'],['campus','No setor'],['finder','Com quem encontrou']],params.get('custody') || '')}
-    ${input('Local','location',params.get('location'),'list="locations" placeholder="Ex.: Biblioteca" maxlength="120"')}<datalist id="locations">${locationOptions()}</datalist>
+    <fieldset><legend>Categoria</legend>${choices('category',categoryOptions('Todas'))}</fieldset>
+    <fieldset><legend>Status</legend>${choices('status',[['','Todos'],...displayStatus()])}</fieldset>
+    ${select('Local','location',[['','Todos os locais'],...session.locations.map(x=>[x.name,x.name])],params.get('location')||'')}
     <div class="form-grid">${input('A partir de','from',params.get('from'),`type="date" max="${today()}"`)}
     ${input('Até','to',params.get('to'),`type="date" max="${today()}"`)}</div>
-    <div class="form-error" role="alert"></div><div class="form-actions">${link(withQuery('/','q',params.get('q')),'Limpar filtros')}${submit('Aplicar filtros')}</div></form>`);
+    <div class="form-error" role="alert"></div><div class="form-actions">${link(withQuery('/','q',params.get('q')),'Limpar filtros')}${submit('Aplicar filtros')}</div></form>`,'prototype-sheet');
   onForm('#filters-form', data => {
     if (data.from && data.to && data.from > data.to) throw new Error('A data inicial precisa vir antes da data final.');
-    let path = location.pathname + location.search;
+    let path = withQuery('/','q',params.get('q'));
     for (const [key,value] of Object.entries(data)) path = withQuery(path,key,value);
     go(path,{ keepScroll:true });
   });
@@ -262,12 +226,13 @@ function authNext(url) {
   return safePath(url.searchParams.get('next'),'');
 }
 
+actions['show-terms']=()=>modal('Uso e privacidade','<p>Use dados verdadeiros e publique apenas fotos do objeto. Os achados ficam no mural público. As perdas são acessíveis à sua conta e ao setor. Quando alguém inicia o contato sobre um achado, o WhatsApp das pessoas envolvidas é usado para combinar a devolução.</p>');
 function authPage(path, url) {
   const next = authNext(url);
   const target = next ? `?next=${encodeURIComponent(next)}` : '';
   const authTypes = {
-    '/entrar': ['Login','Entre para registrar objetos ou acompanhar suas solicitações.','Entrar'],
-    '/cadastro': ['Criar sua conta','Cadastre-se para registrar objetos e solicitar a devolução.','Criar conta'],
+    '/entrar': ['Login','Entre para registrar itens encontrados ou procurar algo que você perdeu no campus.','Entrar'],
+    '/cadastro': ['Criar conta','Preencha seus dados para acessar o sistema de achados e perdidos da Fatec.','Criar conta'],
     '/recuperar-senha': ['Recuperar senha','Informe o e-mail da conta para receber um link de redefinição.','Enviar link'],
     '/redefinir-senha': ['Escolher nova senha','Use uma senha com pelo menos 10 caracteres.','Salvar nova senha']
   };
@@ -279,24 +244,26 @@ function authPage(path, url) {
   const unavailable = forgot && !session.features.reset;
   const institutional = url.searchParams.get('institucional');
   const institutionMessage = institutional === 'vinculado' ? 'Esta conta institucional já está vinculada.' : institutional === 'falhou' ? 'Não foi possível entrar com a conta institucional. Tente novamente.' : '';
-  site.innerHTML = shell(`<section class="auth-wrap panel"><div class="auth-titlebar">
+  site.innerHTML = shell(`<section class="original-auth"><div class="auth-titlebar">
     ${link(login ? '/' : `/entrar${target}`,'',{ cls:'button secondary auth-back',symbol:'back',attrs:'aria-label="Voltar"' })}
     <span>${title}</span></div><div class="auth-form">
-    <div class="form-heading">${login ? `<span class="auth-icon">${icon('tag')}</span>` : ''}
-      <h1>${login ? siteName : title}</h1>${login && session.campus ? `<small class="campus-name">${e(session.campus)}</small>` : ''}<p>${description}</p></div>
+    <div class="form-heading">${login ? `<span class="logo-main">${icon('box')}</span>` : ''}
+      ${login?'<h1 class="auth-h1">Achados &amp; Perdidos</h1>':''}${login && session.campus ? `<small class="campus-name">${e(session.campus)}</small>` : ''}<p>${description}</p></div>
     ${unavailable ? `<div class="notice">A recuperação automática por e-mail ainda não está disponível. Procure o setor de Achados e Perdidos.</div>${link('/entrar','Voltar para o login')}` :
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
       ${!reset ? input('E-mail','email','','type="email" required maxlength="254" autocomplete="username" placeholder="voce@exemplo.com"') : ''}
-      ${register ? input('Telefone com DDD','phone','','type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
+      ${register ? input('Telefone / WhatsApp','phone','','type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
       ${!forgot ? input('Senha','password','',`type="password" required ${login ? '' : 'minlength="10"'} maxlength="128" autocomplete="${login ? 'current-password' : 'new-password'}"`) : ''}
       ${register || reset ? input('Confirmar senha','confirm','', 'type="password" required minlength="10" maxlength="128" autocomplete="new-password"') : ''}
-      ${login ? `<div class="auth-options"><label class="check"><input type="checkbox" name="remember">Manter conectado</label>
+      ${login ? `<div class="auth-options"><label class="check"><input type="checkbox" name="remember">Lembrar de mim</label>
         ${link('/recuperar-senha','Esqueci a senha',{ cls:'text-link' })}</div>` : ''}
+      ${register?`<label class="check"><input name="terms" type="checkbox" required><span>Li e aceito as ${btn('show-terms','orientações de uso','','link-button')} e as informações sobre privacidade.</span></label>`:''}
       <div class="form-error" role="alert">${e(institutionMessage)}</div>${submit(verb,'arrow')}</form>`}
     ${login && session.features.sso ? `<a href="/api/auth/microsoft?next=${encodeURIComponent(next || '/')}" class="button secondary institutional">${icon('building')}Entrar com a conta institucional</a>` : ''}
     <p class="auth-bottom">${login ? 'Não tem conta? ' + link(`/cadastro${target}`,'Criar conta',{ cls:'text-link' }) :
       register ? 'Já tem conta? ' + link(`/entrar${target}`,'Entrar',{ cls:'text-link' }) : ''}</p></div></section>`,{ auth:true });
   onForm('#auth-form', async (data, form) => {
+    if (register && data.terms !== 'on') throw new Error('Leia e aceite as orientações antes de continuar.');
     if ((register || reset) && data.password !== data.confirm) throw new Error('As senhas precisam ser iguais.');
     if (forgot) {
       await api('/auth/forgot',{ method:'POST',body:data });
@@ -329,42 +296,32 @@ async function detail(itemId, token) {
     sourceLoss = losses.find(loss => loss.id === sourceId);
     if (token !== navigation) return;
   }
-  const own = item.isMine;
-  const active = ['open','reserved'].includes(item.status);
-  const photoList = item.photos.map((src,index) => `<button type="button" class="thumb" data-action="gallery" data-index="${index}" aria-label="Ampliar foto ${index + 1}"><img src="${e(src)}" alt=""></button>`).join('');
-  const status = item.request?.status;
-  let action = '';
-  if (item.kind === 'found' && active && !own) {
-    if (status === 'pending' || status === 'approved') action = link(contactPath(item),'Acompanhar solicitação',{ cls:'button primary',symbol:'bell' });
-    else if (session.user && (!sourceId || sourceLoss)) action = btn('claim','Reconheci este objeto','target','primary');
-    else if (!session.user) action = link(nextQS(location.pathname + location.search),'Entrar para pedir devolução',{ cls:'button primary',symbol:'lock' });
-    else action = link(itemHref(item.id),'Abrir ficha no mural');
-  }
-  const recordsPath = item.kind === 'lost' ? '/meus-registros?aba=perdi' : '/meus-registros';
-  if (own || item.canRate) action += link(recordsPath,'Ver meus registros',{ cls:'button secondary',symbol:'list' });
-  if (item.canViewReceipt) action += link(receiptHref(item.id),'Ver comprovante',{symbol:'list'});
-  if (item.canRate && !item.rating) action += btn('rate-current','Avaliar devolução','star','secondary');
-  if (item.canManage && active) action += btn('qr-current','Gerar etiqueta QR','qr','secondary');
-  site.innerHTML = shell(`<div class="back-row">${link(sourceLoss ? itemHref(sourceLoss.id) : item.kind === 'lost' ? recordsPath : '/',
-    sourceLoss ? 'Voltar à minha perda' : item.kind === 'lost' ? 'Meus registros' : 'Voltar ao mural',{ cls:'text-link',symbol:'back' })}</div>
-    <div class="detail-grid"><div class="gallery panel"><div class="gallery-main ${item.photos[0] ? '' : 'no-picture'}">
-    ${item.photos[0] ? `<button type="button" data-action="gallery" data-index="0" aria-label="Ampliar foto do objeto"><img src="${e(item.photos[0])}" alt="${e(item.title)}"></button>` : cover(item)}</div>
-    ${item.photos.length > 1 ? `<div class="thumbnails">${photoList}</div>` : ''}</div>
-    <section class="detail-content"><div class="detail-tags"><span class="item-category">${e(item.category)}</span>${badge(item.status)}</div>
-    <h1>${e(item.title)}</h1><p class="description">${e(item.description)}</p>
-    <dl class="details-list"><div><dt>${icon('pin')} ${item.kind === 'found' ? 'Local do achado' : 'Local da perda'}</dt><dd>${e(item.location || 'Não informado')}</dd></div>
-      <div><dt>${icon('calendar')} ${item.kind === 'found' ? 'Encontrado em' : 'Perdido por volta de'}</dt><dd>${niceDate(item.occurredOn)}</dd></div>
-      ${item.custody ? `<div><dt>${icon('box')} Guarda</dt><dd>${e(custodyText[item.custody])}</dd></div>` : ''}
-      ${active && item.custody === 'campus' && session.sector.location ? `<div><dt>${icon('building')} Ponto de retirada</dt><dd>${e(session.sector.location)}</dd></div>` : ''}
-      ${active && item.custody === 'campus' && session.sector.hours ? `<div><dt>${icon('calendar')} Atendimento</dt><dd>${e(session.sector.hours)}</dd></div>` : ''}
-      ${item.returnedOn ? `<div><dt>${icon('check')} Devolução</dt><dd>${niceDate(item.returnedOn)}</dd></div>` : ''}</dl>
-    ${sourceLoss ? `<p class="loss-context">Comparando com sua perda <strong>${e(sourceLoss.title)}</strong></p>` : sourceId && session.user ? '<p class="loss-context">A perda selecionada já foi encerrada ou está indisponível.</p>' : ''}
-    <div class="detail-actions">${action}${item.kind === 'found' && item.publication === 'public' ? btn('share','Compartilhar','share','secondary') : ''}</div>
-    ${item.kind === 'found' && active && !own && !status ? `<p class="pickup-explainer">Descreva um detalhe do objeto para ${item.custody === 'campus' ? 'o setor' : 'quem o encontrou'} conferir. Depois da aprovação, vocês podem combinar a retirada aqui.</p>` : ''}</section></div>`);
-  actions.gallery = button => showGallery(item,Number(button.dataset.index));
-  actions.claim = () => claim(item,sourceLoss);
-  actions['rate-current'] = () => rate(item.id);
-  actions['qr-current'] = () => qrLabel(item);
+  const mine=item.isMine, active=['open','reserved'].includes(item.status);
+  const info=(symbol,label,value)=>`<div class="info-row">${icon(symbol)}<div><span>${label}</span><b>${e(value)}</b></div></div>`;
+  const whatsappButton=btn('start-whatsapp',item.reservedForMe?'Abrir conversa novamente':'Entrar em contato pelo WhatsApp','whatsapp','whatsapp-btn');
+  let contact;
+  if(!active) contact=`<div class="return-complete">${icon('check')}<div><b>Item devolvido</b><span>${niceDate(item.returnedOn)}</span></div>${item.canViewReceipt?link(receiptHref(item.id),'Ver informações',{cls:'link'}):''}</div>`;
+  else if(mine) contact=`<h3>Gerenciar meu registro</h3><p>${item.custody==='campus'?'O setor da Fatec registra a devolução.':'O item está com você.'}</p>${link(contactPath(item),'Ver solicitações',{cls:'btn secondary full'})}${item.custody==='finder'?btn('direct-handover','Registrar devolução manualmente','check','btn full'):''}`;
+  else if(!session.user) contact=`<div class="contact-head"><div><h3>Entrar em contato</h3><span>O contato é protegido por login.</span></div><span class="secure-chip">${icon('lock')} Protegido</span></div>
+    <div class="locked-contact-v2"><div class="contact-preview-blur" aria-hidden="true"><div class="contact-owner">Responsável pelo item</div><div class="whatsapp-btn">${icon('whatsapp')} Entrar em contato pelo WhatsApp</div></div>
+    <div class="contact-gate"><div class="lock-circle">${icon('lock')}</div><div><b>Faça login para continuar</b><span>Entre para conversar com o responsável pelo WhatsApp.</span></div>${link(nextQS(location.pathname+location.search),'Entrar',{cls:'btn sm',attrs:'aria-label="Entrar para abrir o WhatsApp"'})}</div></div>`;
+  else if(item.status==='reserved'&&!item.reservedForMe)contact='<h3>Item reservado</h3><p>Outro possível proprietário já está combinando a devolução.</p>';
+  else contact=`<div class="contact-head"><div><h3>${item.reservedForMe?'Contato em andamento':'Entrar em contato'}</h3><span>Ao abrir o WhatsApp, sua solicitação fica registrada.</span></div></div>
+    <div class="contact-owner"><div class="avatar">${e(initial(item.contactName))}</div><div><b>${e(item.contactName)}</b><span>${item.custody==='campus'?'Setor responsável pela guarda':'Pessoa que encontrou o item'}</span></div></div>${whatsappButton}<p id="contact-error" role="alert"></p>`;
+  site.innerHTML=shell(`<div class="detail-hero"><button class="hero-open" data-action="gallery" data-index="0" aria-label="Ampliar foto">${cover(item)}</button><div class="detail-actions">${link('/',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}${btn('share','','share','icon-btn','aria-label="Compartilhar"')}</div></div>
+    <div class="row between">${badge(item.status)}<span class="detail-code">Código #${e(item.id.slice(0,8).toUpperCase())}</span></div><h1 class="detail-title">${e(item.title)}</h1><p class="detail-description">${e(item.description)}</p>
+    <div class="detail-info">${info('box','Categoria',item.category)}${info('pin','Local onde foi encontrado',item.location)}${info('calendar','Data do encontro',niceDate(item.occurredOn))}</div>
+    <div class="current-location">${icon('box')}<div><b>Onde o item está agora</b><br>${active?e(custodyText[item.custody]):'Item já devolvido ao proprietário'}${active && item.custody==='campus' && session.sector.location?' · '+e(session.sector.location):''}</div></div><section class="contact-box">${contact}</section>`,{detail:true});
+  actions.gallery=button=>showGallery(item,Number(button.dataset.index));
+  actions['direct-handover']=()=>returnDialog(item);
+  actions['start-whatsapp']=async button=>{
+    button.disabled=true;
+    try {
+      const {url}=await api('/items/'+item.id+'/whatsapp',{method:'POST',body:{lostId:sourceLoss?.id}});
+      location.assign(url);
+    } catch(error) {const feedback=qs('#contact-error');if(feedback)feedback.textContent=error.message;}
+    finally {button.disabled=false;}
+  };
 }
 
 async function ownLossPage(item, token) {
@@ -421,49 +378,6 @@ actions.share = async () => {
   catch { modal('Compartilhar item', `<label>Link do item<input readonly value="${e(url)}"></label>`); }
 };
 
-async function claim(item, sourceLoss) {
-  if (!session.user?.phone) {
-    modal('Complete seu perfil',`<p>Informe seu telefone para que o responsável possa combinar a entrega após aprovar o pedido.</p>
-      ${link('/perfil?next=' + encodeURIComponent(location.pathname + location.search),'Informar telefone',{ cls:'button primary' })}`);
-    return;
-  }
-  const at = navigation;
-  const { losses } = sourceLoss ? { losses:[] } : await api(`/items/${item.id}/claim-options`);
-  if (at !== navigation) return;
-  modal('Solicitar devolução', `<p>Descreva um detalhe que ajude a confirmar que “${e(item.title)}” é seu. Após a aprovação, quem está com o objeto pode entrar em contato pelo WhatsApp para combinar a entrega.</p>
-    <form class="stack" id="claim-form">${sourceLoss ? `<p class="loss-context">Perda vinculada <strong>${e(sourceLoss.title)}</strong></p>` :
-      losses.length ? select('Vincular a uma perda minha','loss',[['','Selecione uma opção'],...losses.map(loss => [loss.id,loss.title + ' · ' + niceDate(loss.occurredOn)]),['new','Ainda não registrei esta perda']],losses.length === 1 ? losses[0].id : '','required') : ''}
-    ${textarea('Como reconhecer seu objeto?','message','','required minlength="10" maxlength="700" rows="4" placeholder="Ex.: detalhe da capa, marca de uso ou conteúdo…"')}
-    <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Enviar solicitação','arrow')}</div></form>`);
-  onForm('#claim-form', async data => {
-    await api(`/items/${item.id}/contact`,{ method:'POST',body:{ message:data.message,lostId:sourceLoss?.id || (data.loss === 'new' ? undefined : data.loss) } });
-    notify('Solicitação enviada.');
-    go(contactPath(item));
-  });
-}
-
-async function qrLabel(item) {
-  const { default: QR } = await import('./vendor/qr-creator.js');
-  modal('Etiqueta do objeto', `<div class="qr-label"><strong>${siteName}</strong><p>${e(item.title)}</p>
-    <div id="qr-code" aria-label="QR Code para consultar o item"></div><small>${e(item.id.slice(0,8).toUpperCase())}</small></div>
-    <div class="form-actions">${btn('qr-download','Baixar etiqueta','download','primary')}</div>`);
-  QR.render({ text:new URL(itemHref(item.id),location.origin).href,radius:0,ecLevel:'M',fill:'#151515',background:'#ffffff',size:240 },qs('#qr-code'));
-  actions['qr-download'] = () => {
-    const code = qs('#qr-code canvas');
-    const label = document.createElement('canvas');
-    label.width = 320; label.height = 365;
-    const ctx = label.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,320,365);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#171615'; ctx.font = 'bold 17px sans-serif';
-    ctx.fillText(siteName.toUpperCase(),160,36);
-    ctx.font = '14px sans-serif'; ctx.fillText(item.title,160,63,275);
-    ctx.drawImage(code,40,79);
-    ctx.font = '13px monospace'; ctx.fillText(item.id.slice(0,8).toUpperCase(),160,339);
-    const a = document.createElement('a');
-    a.href = label.toDataURL('image/png'); a.download = `achados-e-perdidos-${item.id.slice(0,8)}.png`; a.click();
-  };
-}
-
 function newChoice() {
   site.innerHTML = shell(`${header('Registrar um objeto','Escolha o que aconteceu.')}
     <div class="choice-grid"><a class="choice-card panel" href="/novo/found" data-nav><span class="choice-icon">${icon('box')}</span><div><h2>Encontrei um item</h2><p>Publique uma foto e informe onde o objeto está guardado.</p></div>${icon('arrow')}</a>
@@ -503,30 +417,21 @@ function itemForm(kind, url) {
   const prefill = found ? {} : { title:(params.get('objeto') || '').slice(0,90), location:(params.get('local') || '').slice(0,120),
     categoryId:session.categories.find(cat => cat.id === params.get('categoria'))?.id || '' };
   const draft = { ...prefill,...saved };
-  const fromSearch = !found && Object.values(prefill).some(Boolean);
   if (!photoDraft || photoDraft.key !== draftKey(kind)) clearPhotoDraft(kind);
-  site.innerHTML = shell(`<div class="back-row">${link('/novo','Tipo de registro',{ cls:'text-link',symbol:'back' })}</div>
-    ${header(found ? 'Encontrei um item' : 'Registrar uma perda',found
-      ? 'Ajude quem perdeu a reconhecer o objeto e encontrar o caminho para recuperá-lo.'
-      : 'Guarde os detalhes da perda e consulte itens encontrados que podem corresponder.')}
-    <div class="edit-grid"><form class="panel editor stack" id="item-form"><div class="form-heading"><h2>Informações do objeto</h2><p>${Object.keys(saved).length ? 'Retomamos seu rascunho nesta aba.' : fromSearch ? 'Trouxemos os dados da sua busca. Confira e complete o que falta.' : found ? 'A foto e o local ajudam a reconhecer o item.' : 'Descreva o que perdeu e onde lembra de ter visto o objeto.'}</p></div>
-      ${found ? '' : itemFields(kind,draft)}
-      <section class="upload-section"><div class="field-title">${found ? 'Fotos do item' : 'Fotos opcionais'} <span id="photo-total"></span></div>
-      <div class="photo-previews" id="photo-previews"></div><div class="upload-actions">
-        <label class="button secondary upload-button">${icon('image')}Adicionar foto<input type="file" id="photo-files" accept="image/*" multiple></label>
-        <label class="button secondary upload-button">${icon('camera')}Usar câmera<input type="file" id="photo-camera" accept="image/*" capture="environment"></label></div>
-      ${session.features.suggestions ? `<div class="suggest"><button type="button" class="text-link" data-action="suggest">${icon('spark')}Sugerir categoria pela foto</button></div>` : ''}
-      <p class="hint">${found ? 'De uma a três fotos.' : 'Até três fotos.'} Evite mostrar documentos, números ou rostos.</p></section>
-      ${found ? itemFields(kind,draft) : ''}
-      ${found ? `<fieldset class="custody"><legend>Com quem o item está?</legend>
-        <label class="choice-option"><input type="radio" name="custody" value="finder" ${checked(draft.custody !== 'campus')}>${icon('user')}<span><b>Está comigo</b><small>Eu combino a entrega com quem perdeu.</small></span></label>
-        <label class="choice-option"><input type="radio" name="custody" value="campus" ${checked(draft.custody === 'campus')}>${icon('building')}<span><b>Entreguei no setor</b><small>O setor confirma a retirada.</small></span></label></fieldset>` :
-        `<label class="check"><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone)}>Compartilhar meu WhatsApp com o setor para tratar desta perda</label>`}
-      <div class="form-error" role="alert"></div><div class="form-actions">${link('/novo','Voltar')}${submit(found ? 'Publicar item' : 'Registrar perda','arrow')}</div></form>
-    <aside class="panel side-note"><span class="choice-icon">${icon(found ? 'shield' : 'target')}</span><h2>${found ? 'Foto e descrição' : 'Como recuperar'}</h2>
-    <p>${found ? 'Mostre o suficiente para a pessoa reconhecer o objeto. Guarde algum detalhe para confirmar a identificação na hora da entrega.'
-      : 'As perdas ficam nos seus registros. Se um item encontrado parecer seu, você pode vincular os dois ao solicitar a devolução.'}</p>
-    ${link('/ajuda','Entenda o processo',{ cls:'text-link',symbol:'arrow' })}</aside></div>`);
+  const pointOptions = [['','Selecione'],...session.locations.map(l=>[l.name,l.name])];
+  if(draft.location && !pointOptions.some(([value])=>value===draft.location)) pointOptions.push([draft.location,draft.location]);
+  site.innerHTML=shell(`<div class="auth-titlebar">${link('/',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}<h2>Registrar item ${found?'encontrado':'perdido'}</h2><span></span></div>
+    <form class="stack" id="item-form">${found?'':'<div class="notice">Descreva o item com o máximo de detalhes. Você também pode adicionar fotos de referência para facilitar a identificação.</div>'}
+    <div class="upload-zone"><div class="upload-title"><div><b>${found?'Fotos do item':'Fotos de referência (opcional)'}</b><div class="tiny muted">${found?'Adicione de 1 a 3 fotos. A primeira será a capa.':'Até 3 fotos do item perdido.'}</div></div><span id="photo-total" class="tiny muted"></span></div>
+    <div class="photo-grid" id="photo-previews"></div><div class="photo-actions"><label class="photo-action-btn upload-button">${icon('image')}Escolher foto<input type="file" id="photo-files" accept="image/*" multiple></label><label class="photo-action-btn upload-button">${icon('camera')}Usar câmera<input type="file" id="photo-camera" accept="image/*" capture="environment"></label></div></div>
+    ${input(found?'Título do item':'O que você perdeu?','title',draft.title,'class="control" required minlength="3" maxlength="90"')}
+    ${textarea('Descrição','description',draft.description,'class="control" required minlength="8" maxlength="1200"')}
+    <div class="grid2">${select('Categoria','categoryId',categoryOptions(),draft.categoryId,'class="control" required')}
+    ${input(found?'Data do encontro':'Data aproximada','occurredOn',draft.occurredOn||today(),`class="control" type="date" required max="${today()}"`)}</div>
+    ${select(found?'Local onde foi encontrado':'Onde acha que perdeu? (opcional)','location',pointOptions,draft.location,found?'class="control" required':'class="control"')}
+    ${found?`<fieldset class="custody"><legend>Onde o item está agora?</legend><label class="choice-option"><input type="radio" name="custody" value="finder" ${checked(draft.custody==='finder')}>Está comigo</label><label class="choice-option"><input type="radio" name="custody" value="campus" ${checked(draft.custody!=='finder')}>Entreguei na Fatec</label></fieldset>`:`<label class="check"><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone==='on')}>Compartilhar meu contato com o setor</label>`}
+    <small class="draft-note">${icon('check')} Rascunho salvo automaticamente nesta aba</small>
+    <div class="form-error" role="alert"></div>${submit(found?'Publicar registro':'Registrar solicitação')}</form>`);
   drawPhotos();
   const form = qs('#item-form');
   form.addEventListener('input', event => {
@@ -559,7 +464,9 @@ function itemForm(kind, url) {
     try { sessionStorage.removeItem(draftKey(kind)); } catch {}
     clearPhotoDraft();
     notify(found ? (response.item.publication === 'pending' ? 'Item enviado para revisão.' : 'Item publicado.') : 'Perda registrada.');
-    go(itemHref(response.item.id));
+    go('/meus-registros');
+    modal(found?'Item publicado com sucesso':'Solicitação registrada com sucesso',`<p>${e(response.item.title)}</p><div class="form-actions">${link('/meus-registros','Meus registros',{cls:'btn full'})}${link('/','Voltar ao início',{cls:'btn secondary'})}</div>`);
+
   });
 }
 
@@ -689,42 +596,36 @@ function recordCard(item) {
   const key = `data-id="${item.id}"`;
   const controls = [];
   if (found && active && item.custody === 'finder' && mine) {
-    controls.push(btn('transfer','Entreguei no setor','building','secondary',key));
     controls.push(btn('return-record','Registrar devolução','check','primary',key));
   }
-  if (!found && active) controls.push(link(itemHref(item.id),'Comparar achados',{ symbol:'search' }));
+  if (!found && active && !item.recoveryForId && !item.contactCount) controls.push(btn('match-record','Meu item foi encontrado','search','mini-action primary',key));
   if (!archived && !found && item.recoveredItemId) controls.push(link(itemHref(item.recoveredItemId),'Ver devolução',{ symbol:'check' }));
-  if (found && active && item.custody === 'finder' && mine) controls.push(btn('qr-record','Etiqueta QR','qr','secondary',key));
+
   if (item.contactCount && (!found || item.custody === 'finder') && active) controls.push(link(contactPath(item),`${item.contactCount} solicitaç${item.contactCount === 1 ? 'ão' : 'ões'}`,{ cls:'button secondary',symbol:'bell' }));
   if (!archived && found && item.status === 'returned' && !item.finderRating && item.recipientId !== session.user.id) {
     controls.push(btn('rate-record','Avaliar devolução','star','primary',key));
   }
-  if (item.canViewReceipt) controls.push(link(receiptHref(item.id),'Ver comprovante',{symbol:'list'}));
+  if (item.canViewReceipt) controls.push(link(receiptHref(item.id),'Ver devolução',{symbol:'list'}));
   if (item.canChange && archived) controls.push(btn('restore-own','Restaurar','history','secondary',key));
-  if (item.canChange && !archived) {
-    controls.push(btn('edit-own','Editar','edit','secondary',key));
-    controls.push(btn('archive-own','Arquivar','archive','quiet',key));
-  }
   const photo = archived ? `<div class="record-photo">${cover(item)}</div>` :
     `<a href="${itemHref(item.id)}" data-nav class="record-photo" aria-label="Ver ${e(item.title)}">${cover(item)}</a>`;
-  return `<article class="record panel">${photo}
-    <div class="record-body"><div class="record-tags">${archived ? badge('archived','Arquivado') : badge(item.status)}
-      ${!archived && found && item.publication !== 'public' ? badge(item.publication) : ''}
-      <span class="item-category">${e(item.category)}</span></div>
-      <h3>${archived ? e(item.title) : link(itemHref(item.id),e(item.title),{ cls:'record-title' })}</h3>
-      <div class="inline-meta">${rowInfo('calendar',niceDate(archived ? item.archivedAt : item.occurredOn))}${item.location ? rowInfo('pin',item.location) : ''}${item.custody ? rowInfo('box',custodyText[item.custody]) : ''}</div>
-      ${controls.length ? `<div class="record-actions">${controls.join('')}</div>` : ''}</div></article>`;
+  const note=!found ? (item.status==='recovered'?'Item recuperado':item.recoveryForId?'Contato iniciado':'Aguardando localização') :
+    item.status==='returned'?'Item devolvido':item.custody==='campus'?'Sob guarda da Fatec':'O item está com você';
+  if (!found && item.recoveryForId && active) controls.unshift(link(itemHref(item.recoveryForId),'Ver item',{cls:'mini-action primary'}));
+  return `<article class="record-card"><div class="record-main"><div class="item-photo">${photo}</div><div class="grow"><div class="item-kicker">${found?'Você encontrou':'Você perdeu'}</div>
+    <div class="item-title">${e(item.title)}</div><div class="item-meta">${e(item.location||'Local não informado')} · ${niceDate(item.occurredOn)}</div></div>${badge(item.status)}</div>
+    <div class="record-footer"><span>${found?'Encontrado':'Perdido'}</span>${link(itemHref(item.id),'Ver detalhes ›',{cls:'link'})}</div>
+    <div class="record-status-panel"><div><b>${note}</b></div></div><div class="record-actions">${controls.join('')}</div></article>`;
 }
 
 const recordTabs = [
-  ['/meus-registros','Encontrei','found'], ['/meus-registros?aba=perdi','Perdi','lost'],
-  [contactsPage,'Solicitações','contacts'], ['/meus-registros?aba=devolucoes','Devoluções','returns']
+  ['/meus-registros','Todos','all'], ['/meus-registros?aba=encontrei','Encontrei','found'], ['/meus-registros?aba=perdi','Perdi','lost']
 ];
 
 async function records(url, token) {
   const path = url.pathname + url.search;
   if (!needUser(path)) return;
-  const tab = { perdi:'lost',contatos:'contacts',avaliacoes:'returns',devolucoes:'returns' }[url.searchParams.get('aba')] || 'found';
+  const tab = { encontrei:'found',perdi:'lost',contatos:'contacts',avaliacoes:'returns',devolucoes:'returns' }[url.searchParams.get('aba')] || 'all';
   let content;
   let rows = [];
   if (tab === 'contacts') {
@@ -744,30 +645,37 @@ async function records(url, token) {
       `<article class="return-row"><div><small>${niceDate(item.returnedOn)} · ${role[item.role]}</small><h3>${e(item.title)}</h3>
         ${item.rating ? `<p class="return-rating">${icon('star')} Sua avaliação · ${item.rating}/5</p>` : ''}
         ${item.comment ? `<p class="return-comment">${e(item.comment)}</p>` : ''}</div><div class="record-actions">
-        ${item.canViewReceipt ? link(receiptHref(item.id),'Ver comprovante',{symbol:'list'}) : ''}
+        ${item.canViewReceipt ? link(receiptHref(item.id),'Ver devolução',{symbol:'list'}) : ''}
         ${item.canRate && !item.rating ? btn('rate-record','Avaliar entrega','star','quiet',`data-id="${item.id}"`) : ''}</div></article>`).join('')}</div>` :
       empty('Nenhuma devolução registrada','As entregas dos objetos que você encontrou ou recuperou aparecerão aqui.','','box')) + pager(path,data);
   } else {
     const archived = url.searchParams.get('arquivados') === '1';
-    const query = new URLSearchParams({ kind:tab, page:url.searchParams.get('page') || '1' });
+    const query = new URLSearchParams({ page:url.searchParams.get('page') || '1' });
+    if (tab !== 'all') query.set('kind',tab);
     if (archived) query.set('archived','1');
     const data = await api(`/mine?${query}`);
     rows = data.items;
-    const toggle = link(withQuery(path,'arquivados',archived ? null : '1'),
-      archived ? 'Ver registros ativos' : 'Ver arquivados',{ cls:'text-link',symbol:archived ? 'back' : 'archive' });
     let list;
     if (rows.length) list = `<div class="record-list">${rows.map(recordCard).join('')}</div>`;
     else if (archived) list = empty('Nenhum registro arquivado','Os registros que você arquivar aparecerão aqui.','','archive');
+    else if(tab==='all') list=empty('Você ainda não possui registros nesta categoria.','','','list');
     else list = empty(tab === 'found' ? 'Você ainda não registrou itens encontrados' : 'Você ainda não registrou perdas',
         tab === 'found' ? 'Quando publicar um objeto encontrado, ele aparecerá aqui.' : 'Registre uma perda para consultar objetos compatíveis.',
         link(`/novo/${tab}`,tab === 'found' ? 'Registrar um encontrado' : 'Registrar uma perda',{ cls:'button primary',symbol:'plus' }));
-    content = `<div class="back-row">${toggle}</div>${list}${pager(path,data)}`;
+    content = `${list}${pager(path,data)}`;
   }
   if (token !== navigation) return;
-  site.innerHTML = shell(`${header('Meus registros','Acompanhe seus objetos e o andamento das devoluções.',link('/novo','Registrar item',{ cls:'button primary',symbol:'plus' }))}
+  site.innerHTML = shell(`<div class="mobile-top"><h2>${tab==='contacts'?'Solicitações de contato':tab==='returns'?'Minhas avaliações':'Meus registros'}</h2></div>
     ${tabs(recordTabs,tab)}${content}`);
   const itemFor = button => rows.find(item => item.id === button.dataset.id);
-  actions['qr-record'] = button => qrLabel(itemFor(button));
+
+  actions['match-record'] = async button => {
+    const lost = itemFor(button);
+    const {items} = await api('/items/'+lost.id+'/matches');
+    if (token !== navigation) return;
+    const candidates = items.map(found => `<article class="candidate-card">${cover(found)}<div class="grow"><b>${e(found.title)}</b><span>${e(found.category)} · ${e(found.location)}</span></div>${link(withQuery(itemHref(found.id),'perda',lost.id),'É este item',{cls:'mini-action primary'})}</article>`).join('');
+    modal('Meu item foi encontrado',`<p>Selecione o item que você acredita ser o seu.</p><div class="candidate-list">${candidates||'<p>Nenhum item encontrado disponível no momento.</p>'}</div>`,'prototype-sheet');
+  };
   actions['return-record'] = button => returnDialog(itemFor(button));
   actions['edit-own'] = button => editRecord(itemFor(button),true);
   for (const [action,title,description] of [
@@ -790,30 +698,6 @@ actions.transfer = button => {
     async () => { await api(`/items/${item}/transfer`,{ method:'POST',body:{} }); notify('Guarda atualizada.'); go(location.pathname + location.search); },'Confirmar entrega ao setor');
 };
 
-const pickupDay = new Intl.DateTimeFormat('pt-BR',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
-const pickupClock = new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'America/Sao_Paulo'});
-const meetingTime = when => pickupDay.format(new Date(when.slice(0,10) + 'T12:00:00Z')) + ' às ' + when.slice(11);
-
-function pickupPanel(contact) {
-  const {agreed,proposal} = contact.pickup;
-  const mine = proposal?.by === (contact.side === 'received' ? 'custodian' : 'requester');
-  const elapsed = proposal && proposal.when <= today() + 'T' + pickupClock.format(new Date());
-  const key = `data-id="${contact.id}"`;
-  const meeting = (label,info,confirmed) => `<div class="meeting-slip${confirmed ? ' confirmed' : ''}">
-    <span>${icon(confirmed ? 'check' : 'calendar')}${label}</span><strong>${e(meetingTime(info.when))}</strong><p>${icon('pin')}${e(info.place)}</p></div>`;
-  const controls = [];
-  if (proposal && !mine && !elapsed) controls.push(btn('pickup-confirm','Confirmar horário','check','primary',key));
-  if (agreed) controls.push(`<a class="button secondary" href="/api/contacts/${e(contact.id)}/calendar.ics" download="retirada.ics">${icon('calendar')}Adicionar à agenda</a>`);
-  controls.push(btn('pickup-propose',agreed || proposal ? 'Sugerir outro horário' : 'Sugerir local e horário','calendar',agreed || proposal ? 'quiet' : 'primary',key));
-  return `<section class="pickup-panel" aria-label="Combinar retirada">
-    ${agreed ? meeting('Retirada confirmada',agreed,true) : ''}
-    ${proposal ? meeting(mine ? 'Sua sugestão' : 'Sugestão recebida',proposal,false) : ''}
-    ${!agreed && !proposal ? '<h4>Combinar a retirada</h4><p>Sugira um ponto de encontro e um horário. A outra pessoa pode confirmar ou sugerir uma alternativa.</p>' : ''}
-    ${proposal ? `<p class="meeting-note">${elapsed ? 'O horário sugerido já passou.' : mine ? 'Aguardando a confirmação da outra parte.' : agreed ? 'O horário confirmado continua valendo até vocês aceitarem a alteração.' : 'Confira o local e o horário antes de confirmar.'}</p>` : ''}
-    <div class="record-actions">${controls.join('')}</div>
-    ${agreed || proposal ? '<small class="meeting-zone">Horário de Brasília</small>' : ''}</section>`;
-}
-
 function contactCards(contacts,queue = '') {
   if (!contacts.length) {
     const titles = {responder:'Nenhum pedido aguardando resposta',retirar:'Nenhuma retirada aprovada',entregar:'Nenhuma entrega reservada'};
@@ -823,22 +707,22 @@ function contactCards(contacts,queue = '') {
     const received = contact.side === 'received';
     const key = `data-id="${contact.id}"`;
     const primary = [], extra = [];
-    if (contact.canApprove) primary.push(btn('contact-approve','Aprovar e reservar','check','primary',key));
-    if (contact.canDeliver) (contact.status === 'approved' ? primary : extra).push(btn('contact-return','Registrar entrega','check','secondary',key));
+    if (contact.canApprove && !contact.whatsappReservation) primary.push(btn('contact-approve','Aprovar e reservar','check','primary',key));
+    if (contact.canDeliver) primary.push(btn('contact-return','Registrar entrega','check','secondary',key));
     if (contact.canReview) primary.push(btn('contact-reject','Recusar pedido','x','quiet',key));
     if (contact.canRevoke) extra.push(btn('contact-reject','Revogar aprovação','x','quiet',key));
     if (!received && ['pending','approved'].includes(contact.status)) extra.push(btn('contact-cancel','Cancelar pedido','','quiet',key));
-    if (contact.pickup?.proposal) extra.push(btn('pickup-dismiss',contact.pickup.proposal.by === (received ? 'custodian' : 'requester') ? 'Retirar sugestão' : 'Recusar sugestão','','quiet',key));
-    if (contact.pickup?.agreed) extra.push(btn('pickup-unschedule','Desmarcar retirada','','quiet',key));
-    if (contact.phone) extra.push(`<a class="button secondary whatsapp" href="https://wa.me/${e(contact.phone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}Abrir WhatsApp</a>`);
-    if (contact.canViewReceipt) primary.push(link(receiptHref(contact.itemId),'Ver comprovante',{symbol:'list'}));
-    return `<article class="contact-card panel"><div class="contact-top"><span>${received ? 'Pedido recebido' : 'Meu pedido'} · ${niceDate(contact.createdAt)}</span>${badge(contact.status)}</div>
+    if (contact.side==='sent' && contact.whatsappReservation) primary.push(link(itemHref(contact.itemId),'Abrir conversa novamente',{cls:'whatsapp-btn',symbol:'whatsapp'}));
+    if (contact.phone) primary.push(`<a class="whatsapp-btn" href="https://wa.me/${e(contact.phone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}Abrir WhatsApp</a>`);
+    if (contact.canViewReceipt) primary.push(link(receiptHref(contact.itemId),'Ver devolução',{symbol:'list'}));
+    return `<article class="contact-card panel"><div class="contact-top"><span>${received ? 'Pedido recebido' : 'Meu pedido'} · ${niceDate(contact.createdAt)}</span>${badge(contact.status,contact.whatsappReservation?'Em contato':statusText[contact.status])}</div>
       <h3>${contact.canViewItem ? link(itemHref(contact.itemId),e(contact.title),{cls:'record-title'}) : e(contact.title)}</h3>
       <p class="contact-by">${e(received ? contact.requesterName : custodyText[contact.custody])}</p>
-      ${contact.status === 'pending' ? `<div class="claim-proof"><small>${received ? 'Como a pessoa identificou o objeto' : 'Detalhe que você informou'}</small><p>${e(contact.message)}</p></div>` :
+      ${contact.whatsappReservation ? '<p>Contato iniciado pelo WhatsApp. Combine a devolução na conversa.</p>' : contact.status === 'pending' ? `<div class="claim-proof"><small>${received ? 'Como a pessoa identificou o objeto' : 'Detalhe que você informou'}</small><p>${e(contact.message)}</p></div>` :
         `<details class="claim-disclosure"><summary>Detalhe de identificação</summary><p>${e(contact.message)}</p></details>`}
       ${contact.sector && (contact.sector.location || contact.sector.hours) ? `<p class="sector-note">${icon('building')}${e([contact.sector.location,contact.sector.hours].filter(Boolean).join(' · '))}</p>` : ''}
-      ${contact.pickup ? pickupPanel(contact) : ''}
+
+      ${contact.pickup?.agreed?`<p class="sector-note">Retirada já combinada · ${niceDate(contact.pickup.agreed.when)} às ${e(contact.pickup.agreed.when.slice(11))} · ${e(contact.pickup.agreed.place)}</p>`:''}
       ${primary.length ? `<div class="record-actions">${primary.join('')}</div>` : ''}
       ${extra.length ? `<details class="contact-options"><summary>Outras opções</summary><div class="record-actions">${extra.join('')}</div></details>` : ''}
     </article>`;
@@ -852,40 +736,8 @@ function bindContactActions(contacts) {
     const contact = find(button);
     returnDialog({id:contact.itemId,title:contact.title,updatedAt:contact.itemUpdatedAt,occurredOn:contact.occurredOn},contact);
   };
-  const changePickup = async (contact,action,fields = {}) => {
-    try {
-      await api(`/contacts/${contact.id}/pickup`,{method:'POST',body:{action,revision:contact.pickup.revision,custody:contact.custody,...fields}});
-    } catch (error) {
-      if (error.status === 409) { refresh(); notify(error.message); return; }
-      throw error;
-    }
-    notify({propose:'Sugestão enviada.',confirm:'Retirada confirmada.',dismiss:'Sugestão retirada.',unschedule:'Horário desmarcado.'}[action]);
-    refresh();
-  };
-  actions['pickup-propose'] = button => {
-    const contact = find(button);
-    const before = contact.pickup.proposal || contact.pickup.agreed;
-    const now = today() + 'T' + pickupClock.format(new Date());
-    modal('Combinar retirada',`<p>${e(contact.title)}</p><form class="stack" id="pickup-form">
-      ${input('Ponto de encontro','place',before?.place || contact.sector?.location || '','required minlength="2" maxlength="120" placeholder="Ex.: entrada da biblioteca"')}
-      ${input('Dia e horário','when',before?.when > now ? before.when : '',`type="datetime-local" required min="${now}"`)}
-      <p class="hint">Horário de Brasília. A outra pessoa vai confirmar a sugestão.</p>
-      <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Enviar sugestão')}</div></form>`);
-    onForm('#pickup-form',data => changePickup(contact,'propose',data));
-  };
-  for (const [action,title,body,label] of [
-    ['confirm','Confirmar a retirada?','','Confirmar horário'],
-    ['dismiss','Retirar esta sugestão?','O horário sugerido será retirado. A reserva fica ativa.','Retirar sugestão'],
-    ['unschedule','Desmarcar a retirada?','O dia e o horário serão retirados. O objeto continua reservado para vocês combinarem outro encontro.','Desmarcar horário']
-  ]) {
-    actions['pickup-' + action] = button => {
-      const contact = find(button);
-      const meeting = contact.pickup.proposal;
-      confirmAction(title,action === 'confirm' ? `${meetingTime(meeting.when)} · ${meeting.place}` : body,() => changePickup(contact,action),label);
-    };
-  }
   for (const [name,verb,description] of [
-    ['approve','Aprovar identificação','O objeto ficará reservado. Vocês poderão combinar a retirada pelo sistema.'],
+    ['approve','Aprovar identificação','O objeto ficará reservado para esta pessoa.'],
     ['reject','Recusar solicitação','O pedido será encerrado. A pessoa poderá enviar outro com mais detalhes.'],
     ['cancel','Cancelar solicitação','O pedido será retirado e uma eventual reserva será liberada.']
   ]) {
@@ -915,7 +767,7 @@ function returnDialog(item, contact = null, candidates = []) {
     await api(`/items/${item.id}/return`,{ method:'POST',body:{ ...data,updatedAt:item.updatedAt,
       contactId:contact?.id || item.reservedContactId || undefined,lostId:data.lostId || item.reservedLostId || undefined } });
     notify('Entrega registrada.');
-    go(receiptHref(item.id));
+    go('/meus-registros');
   });
 }
 
@@ -929,9 +781,9 @@ async function receiptPage(itemId,token) {
   const field = (label,value) => `<div><dt>${label}</dt><dd>${e(value)}</dd></div>`;
   site.innerHTML = shell(`<div class="receipt-page"><div class="receipt-controls">
     ${link('/meus-registros?aba=devolucoes','Minhas devoluções',{cls:'text-link',symbol:'back'})}
-    ${btn('print-receipt','Imprimir ou salvar em PDF','download','secondary')}</div>
+</div>
     <article class="receipt-sheet"><header><div class="receipt-brand">${icon('tag')}<span>${siteName}${session.campus ? ' · ' + e(session.campus) : ''}</span></div>
-      <h1>Comprovante de devolução</h1></header>
+      <h1>Informações da devolução</h1></header>
     <div class="receipt-object"><span>Objeto entregue</span><h2>${e(receipt.title)}</h2><p>${e(receipt.category)}</p></div>
     <dl class="receipt-facts">${field('Data da entrega',niceDate(receipt.returnedOn))}${field('Recebido por',receipt.recipientName)}
       ${field('Registrado por',receipt.recordedBy)}${field('Guarda na entrega',custodyText[receipt.custody])}</dl>
@@ -953,29 +805,28 @@ function rate(id) {
   });
 }
 
-function profilePage(url) {
-  if (!needUser(url.pathname + url.search)) return;
-  const user = session.user;
-  const institutional = url.searchParams.get('institucional');
-  site.innerHTML = shell(`${header('Minha conta','Gerencie seus dados e seu acesso ao sistema.')}
-    <div class="edit-grid"><form class="panel editor stack" id="profile-form">
-    <div class="profile-heading"><span class="avatar avatar-large">${e(initial(user.name))}</span><div><h2>${e(user.name)}</h2><p>${user.role === 'admin' ? 'Administração' : 'Conta pessoal'}</p></div></div>
-    ${institutional === 'novo' ? '<p class="notice">Informe seu telefone para poder registrar um item ou solicitar uma devolução.</p>' : ''}
-    ${institutional === 'ok' ? '<p class="notice success">Conta institucional vinculada.</p>' : ''}
-    ${input('Nome completo','name',user.name,'required minlength="2" maxlength="90" autocomplete="name"')}
-    ${user.email ? input('E-mail de acesso','email',user.email,'type="email" readonly') : ''}
-    ${input('Telefone com DDD','phone',user.phone,'type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"')}
-    <div class="form-error" role="alert"></div><div class="form-actions">${submit('Salvar alterações','check')}</div></form>
-    <aside class="panel side-note"><span class="choice-icon">${icon('shield')}</span><h2>Acesso à conta</h2>
-    ${user.hasPassword ? btn('change-password','Alterar senha','lock') : ''}
-    ${session.features.sso && !user.institutional ? '<a class="button secondary" href="/api/auth/microsoft?link=1">Vincular conta institucional</a>' : ''}
-    ${user.institutional ? '<p class="hint">Conta institucional vinculada.</p>' : ''}
-    ${btn('logout','Sair da conta','logout','quiet')}</aside></div>`);
-  onForm('#profile-form',async data => {
-    session.user = (await api('/profile',{ method:'PATCH',body:data })).user;
-    notify('Dados salvos.');
-    go(authNext(url) || '/perfil',{ replace:true });
-  });
+async function profilePage(url,token) {
+  if (!needUser(url.pathname+url.search)) return;
+  const u=session.user;
+  const [found,lost,returned]=await Promise.all(['kind=found','kind=lost','kind=found&status=returned'].map(query=>api('/mine?'+query)));
+  if(token!==navigation)return;
+  const menu=(title,symbol,action)=>btn(action,'<span class="left">'+icon(symbol)+title+'</span>'+icon('chev'),'','profile-option');
+  site.innerHTML=shell(`<div class="mobile-top"><h2>Perfil</h2>${btn('profile-data','','edit','icon-btn','aria-label="Editar perfil"')}</div><div class="profile-card"><div class="profile-avatar">${e(initial(u.name))}</div><div><b>${e(u.name)}</b><span>${e(u.email)}</span><span class="red">${u.role==='admin'?'Administrador':'Aluno'}</span></div></div>
+    <div class="stats">${[[found.total,'Encontrados'],[lost.total,'Perdidos'],[returned.total,'Devolvidos']].map(([n,t])=>`<div class="stat"><b>${n}</b><span>${t}</span></div>`).join('')}</div>
+    <div class="profile-menu">${menu('Dados pessoais','user','profile-data')}${u.hasPassword?menu('Alterar senha','lock','change-password'):''}
+    ${menu('Notificações','bell','profile-requests')}${menu('Minhas avaliações','star','profile-ratings')}${menu('Ajuda e termos de uso','help','profile-help')}</div>
+    ${u.role==='admin'?link('/painel','Painel administrativo',{cls:'btn full'}):''}
+    ${session.features.sso&&!u.institutional?'<a class="btn secondary full" href="/api/auth/microsoft?link=1">Vincular conta institucional</a>':''}
+    ${btn('logout','Sair da conta','logout','btn secondary full')}`);
+  actions['profile-requests']=()=>go(contactsPage);
+  actions['profile-ratings']=()=>go('/meus-registros?aba=avaliacoes');
+  actions['profile-help']=()=>go('/ajuda');
+  actions['profile-data']=()=>{
+    modal('Dados pessoais',`<form class="stack" id="profile-form">${input('Nome completo','name',u.name,'required minlength="2" maxlength="90"')}
+      ${input('E-mail','email',u.email,'readonly')}${input('Telefone / WhatsApp','phone',u.phone,'type="tel" required')}<div class="form-error" role="alert"></div>${submit('Salvar alterações')}</form>`);
+    onForm('#profile-form',async data=>{session.user=(await api('/profile',{method:'PATCH',body:data})).user;go(authNext(url)||'/perfil');});
+  };
+  if(!u.phone)actions['profile-data']();
 }
 
 function firstAdmin() {
@@ -1016,15 +867,9 @@ actions.logout = () => confirmAction('Sair da conta?','Você pode entrar novamen
 },'Sair');
 
 function helpPage() {
-  site.innerHTML = shell(`${header('Como funciona','Consulte, registre e recupere objetos no campus.')}
-    <div class="help-layout"><section class="panel editor">
-    <div class="help-step"><span class="choice-icon">${icon('search')}</span><div><h2>Procure o objeto</h2><p>Explore os encontrados por categoria, data, local ou palavra-chave. Se ainda não o encontrou, registre a perda e acompanhe possíveis correspondências.</p></div></div>
-    <div class="help-step"><span class="choice-icon">${icon('camera')}</span><div><h2>Registre um objeto encontrado</h2><p>Adicione uma foto, descreva o objeto e informe onde ele foi encontrado e quem está com ele.</p></div></div>
-    <div class="help-step"><span class="choice-icon">${icon('check')}</span><div><h2>Combine a retirada</h2><p>Abra a ficha e descreva um detalhe que identifica seu objeto. Quando o pedido for aprovado, abra Solicitações em Meus registros para sugerir ou confirmar local, dia e horário.</p></div></div>
-    <div class="help-step"><span class="choice-icon">${icon('list')}</span><div><h2>Consulte o comprovante</h2><p>Quem está com o objeto registra a entrega. Se você recebeu pelo seu pedido ou registrou a devolução, poderá abrir e imprimir o comprovante em Meus registros, na aba Devoluções.</p></div></div></section>
-    <aside class="panel side-note"><span class="choice-icon">${icon('building')}</span><h2>Setor de Achados e Perdidos</h2>
-      ${session.sector.location ? `<p>${e(session.sector.location)}</p>` : ''}${session.sector.hours ? `<p>${e(session.sector.hours)}</p>` : ''}
-      ${link('/novo','Registrar item',{ cls:'button primary',symbol:'plus' })}</aside></div>`);
+  site.innerHTML=shell(`<div class="auth-titlebar">${link('/perfil',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}<h2>Ajuda e termos de uso</h2><span></span></div>
+    <div class="notice"><b>Como funciona</b><p>Cadastre objetos encontrados ou perdidos com informações verdadeiras. Para conversar sobre um objeto, entre na sua conta e abra o WhatsApp na ficha.</p></div>
+    <div class="notice green"><b>Devolução</b><p>Se o item está com você, registre a devolução depois de entregá-lo. Se foi entregue à Fatec, o setor registra a entrega. Quem encontrou e quem recebeu podem avaliar a devolução.</p></div>`);
 }
 
 const adminNav = [
@@ -1035,10 +880,10 @@ const adminNav = [
 ];
 
 function adminShell(content, path) {
-  return shell(`<div class="admin-layout"><aside class="admin-sidebar panel"><span class="eyebrow">Área administrativa</span>
-    <nav aria-label="Painel">${adminNav.map(([url,name,symbol]) =>
-      `<a href="${url}" class="${url === path ? 'on' : ''}" ${url === path ? 'aria-current="page"' : ''} data-nav>${icon(symbol)}<span>${name}</span></a>`).join('')}</nav></aside>
-    <section class="admin-body">${content}</section></div>`,{ wide:true });
+  const menu=adminNav.map(([url,name,symbol])=>link(url,icon(symbol)+' '+e(name),{cls:url===path?'active':''})).join('');
+  return `<div class="admin-app"><aside class="admin-sidebar"><div class="admin-brand"><div class="brand-mark">${icon('box')}</div><div><b>Achados &amp; Perdidos</b><span>Painel administrativo</span></div></div>
+    <nav class="admin-menu">${menu}</nav><div class="admin-spacer"></div><div class="admin-profile"><div class="avatar">${e(initial(session.user.name))}</div><div><b>${e(session.user.name)}</b><span>Administrador</span></div>${btn('logout','','logout','icon-btn','aria-label="Sair"')}</div></aside>
+    <main id="conteudo" class="admin-main" tabindex="-1"><header class="admin-topbar"><h1>${e(adminNav.find(([url])=>url===path)?.[1]||'Painel')}</h1>${link('/','Início',{cls:'link'})}</header><nav class="mobile-admin-bar">${menu}</nav><div class="admin-content">${content}</div></main></div>`;
 }
 
 async function adminPage(url, token) {
@@ -1058,7 +903,7 @@ async function adminPage(url, token) {
     const data = await api(`/contacts?${query}`);
     const { contacts } = data;
     if (token !== navigation) return;
-    site.innerHTML = adminShell(`${header(({responder:'Pedidos para responder',entregar:'Objetos para entregar'})[query.get('fila')] || 'Solicitações','Revise os pedidos para objetos guardados no setor.',
+    site.innerHTML = adminShell(`${header(({responder:'Pedidos para responder',entregar:'Objetos para entregar'})[query.get('fila')] || 'Solicitações','Consulte quem entrou em contato e registre a entrega dos objetos guardados no setor.',
       query.has('fila') || query.has('item') ? link(path,'Todas as solicitações') : '')}${contactCards(contacts,query.get('fila'))}${pager(path + url.search,data)}`,path);
     bindContactActions(contacts);
     return;
@@ -1109,7 +954,7 @@ async function itemManagement(url,token) {
   const row = item => {
     const controls = [];
     const key = `data-id="${item.id}"`;
-    if (item.canViewReceipt) controls.push(link(receiptHref(item.id),'Comprovante',{cls:'button quiet',symbol:'list'}));
+    if (item.canViewReceipt) controls.push(link(receiptHref(item.id),'Ver devolução',{cls:'button quiet',symbol:'list'}));
     if (archived) controls.push(btn('admin-restore','Restaurar','archive','quiet',key));
     else {
       if (!historyMode) {
@@ -1121,7 +966,7 @@ async function itemManagement(url,token) {
           if (item.status === 'reserved') controls.push(btn('admin-reopen','Reabrir','','quiet',key));
           if (item.status !== 'returned' && item.custody === 'campus') controls.push(btn('admin-return','Devolver','check','primary',key));
           if (item.status !== 'returned' && item.custody === 'finder') controls.push(btn('admin-receive','Receber no setor','building','quiet',key));
-          if (item.status !== 'returned') controls.push(btn('admin-qr','Etiqueta','qr','quiet',key));
+
         }
         if (item.contactPhone) controls.push(`<a class="button quiet" href="https://wa.me/${e(item.contactPhone)}" target="_blank" rel="noopener noreferrer">${icon('whatsapp')}WhatsApp</a>`);
         controls.push(btn('admin-archive','Arquivar','archive','quiet danger',key));
@@ -1196,7 +1041,7 @@ function bindAdminItems(items) {
       <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Reservar','check')}</div></form>`);
     onForm('#reserve-form', data => update(item,'reserve',data));
   };
-  actions['admin-qr'] = button => qrLabel(itemFor(button));
+
   actions['admin-history'] = async button => {
     const item = itemFor(button);
     const { timeline,ratings } = await api(`/admin/items/${item.id}/details`);
@@ -1245,11 +1090,11 @@ async function settingsPage(token,path) {
       ${!entry.active ? badge('hidden','Inativo') : ''}${btn('catalog','Editar','edit','quiet',`data-type="${type}" data-id="${e(entry.id)}"`)}</div></div>`).join('')}</section>`;
   site.innerHTML = adminShell(`${header('Configurações','Defina como o setor recebe e publica os registros.')}
     <form class="panel editor stack settings-form" id="settings-form">
-    <div class="form-heading"><h2>Atendimento</h2><p>Essas informações orientam a retirada após a aprovação do pedido.</p></div>
+    <div class="form-heading"><h2>Atendimento</h2><p>O WhatsApp do setor aparece no contato de objetos entregues à Fatec.</p></div>
     <div class="form-grid">${input('Local do setor','location',settings.location,'required minlength="2" maxlength="120"')}
       ${input('WhatsApp institucional (opcional)','phone',settings.phone,'type="tel" maxlength="26"')}</div>
     ${input('Horário de atendimento (opcional)','hours',settings.hours,'maxlength="150" placeholder="Ex.: segunda a sexta, das 13h às 18h"')}
-    <label class="check"><input type="checkbox" name="review" ${checked(settings.review)}>Revisar objetos encontrados antes de publicar</label>
+
     <div class="form-error" role="alert"></div><div class="form-actions">${submit('Salvar configurações','check')}</div></form>
     <div class="dashboard-grid">${catalog('categories','Categorias','Classificação dos objetos.')}${catalog('locations','Locais','Sugestões para preencher os registros.')}</div>`,path);
   onForm('#settings-form',async data => {
@@ -1288,7 +1133,7 @@ async function render() {
     if (path.startsWith('/comprovante/')) return await receiptPage(encodeURIComponent(path.slice(13)),token);
     if (path.startsWith('/item/')) return await detail(encodeURIComponent(path.slice(6)),token);
     if (path === '/meus-registros') return await records(url,token);
-    if (path === '/perfil') return profilePage(url);
+    if (path === '/perfil') return await profilePage(url,token);
     if (path === '/configurar-admin') return firstAdmin();
     if (path === '/ajuda') return helpPage();
     if (['/entrar','/cadastro','/recuperar-senha','/redefinir-senha'].includes(path)) return authPage(path,url);

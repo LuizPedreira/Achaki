@@ -4,11 +4,9 @@
 
 Sistema web para registrar perdas e objetos encontrados, identificar proprietários e documentar a entrega. O catálogo público pode ser consultado sem conta. Os registros de perda, pedidos e contatos ficam disponíveis a quem tem acesso.
 
-O mural permite buscar por descrição e filtrar os objetos que estão no setor ou com quem os encontrou. Se a busca não localizar o objeto, o formulário de perda aproveita o termo, a categoria e o local informados. A ficha privada mostra fotos de possíveis achados e permite vincular o pedido ao registro existente. Quem recuperar o próprio objeto pode encerrar a busca nessa ficha. No mural da pessoa conectada, há atalhos para os pedidos que aguardam resposta e as retiradas aprovadas.
+A tela inicial reúne a busca, os filtros e as opções **Encontrei um item** e **Perdi um item**. Os encontrados aparecem no mural após o cadastro. As perdas ficam em **Meus registros**.
 
-Em **Meus registros**, quem publicou um objeto em aberto pode corrigir os dados, arquivar ou restaurar registros próprios. Essa edição fica disponível para perdas e encontrados que ainda estão com a pessoa que os registrou, enquanto não houver uma solicitação ativa ou reserva vinculada.
-
-Depois da aprovação, abra **Meus registros → Solicitações** para combinar o ponto de encontro e o horário de Brasília. Uma pessoa sugere e a outra confirma. Se houver uma sugestão de mudança, o combinado anterior vale até a confirmação. As duas partes podem baixar a retirada confirmada para a agenda do celular. Depois da entrega, o destinatário vinculado, quem a registrou e a administração podem consultar o comprovante privado e imprimi-lo.
+Na ficha de um encontrado, toque em **Entrar em contato pelo WhatsApp**. Quem está sem sessão entra na conta e retorna à ficha. O sistema reserva o objeto, registra a solicitação e abre a conversa com quem está com ele. Para objetos entregues à Fatec, o painel deve ter o WhatsApp real do setor cadastrado. Quem está com o objeto confirma a devolução após a entrega.
 
 ## Rodar no computador
 
@@ -50,7 +48,7 @@ O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as f
    npx --yes wrangler@4.162.0 secret delete ADMIN_BOOTSTRAP_TOKEN --config wrangler.production.json
    ```
 
-4. Entre em **Painel → Configurações** para informar local, horários e WhatsApp institucionais e decidir se os encontrados precisam de revisão antes de aparecer na busca. Altere `APP_CAMPUS_NAME` em `wrangler.jsonc` para usar o nome de outro campus ou deixe o valor vazio para ocultar o subtítulo.
+4. Entre em **Painel → Configurações** para informar local, horários e WhatsApp institucionais. Altere `APP_CAMPUS_NAME` em `wrangler.jsonc` para usar o nome de outro campus ou deixe o valor vazio para ocultar o subtítulo.
 
 ### Cloudflare Workers Builds
 
@@ -62,9 +60,7 @@ Ao conectar o GitHub ao Worker existente, configure `npm test` como comando de b
 |---|---|
 | Recuperação por e-mail | Defina os segredos `RESEND_API_KEY` e `EMAIL_FROM` com um remetente autorizado pelo Resend. Use `wrangler secret put <nome> --config wrangler.production.json`. |
 | Login institucional Microsoft | Cadastre um aplicativo Web no tenant da instituição com a URL de redirecionamento `https://achados.jrsites.online/api/auth/microsoft/callback`. Defina os segredos `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID` e `MICROSOFT_CLIENT_SECRET`. Para unir uma conta existente ao SSO, entre primeiro nela e use **Vincular conta institucional**, em **Minha conta**. |
-| Sugestão de categoria pela foto | Publique com `npm run deploy -- --suggestions` para ligar o Workers AI. A categoria proposta pode ser alterada antes de publicar o item. |
 | Instalação no celular | No Android, instale pelo navegador compatível. No iPhone, adicione à Tela de Início pelo menu de compartilhamento do Safari. Os registros precisam de conexão. |
-| Etiqueta QR | Gere e baixe uma etiqueta no detalhe de um objeto sob sua guarda ou na lista de encontrados do painel. |
 
 Consulte as páginas oficiais sobre [domínios de Workers](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/), [D1](https://developers.cloudflare.com/d1/get-started/), [R2](https://developers.cloudflare.com/r2/get-started/), [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/limits/) e [Workers AI](https://developers.cloudflare.com/workers-ai/models/resnet-50/).
 

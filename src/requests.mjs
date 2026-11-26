@@ -50,6 +50,66 @@ export async function requestContact(env, user, itemId, input) {
   throw new HttpError(409, 'O item ou o registro de perda selecionado não está mais disponível.');
 }
 
+// A conversa parte de uma reserva. O lote é indivisível para dois alunos que tocam no mesmo item.
+export async function whatsapp(env,user,itemId,input) {
+  requireUser(user);
+  if (!user.phone) throw new HttpError(409,'Cadastre seu WhatsApp no perfil antes de iniciar o contato.');
+  const item = await loadItem(env,itemId);
+  if (!item || item.kind !== 'found' || item.publication !== 'public' || item.archived_at) throw new HttpError(404,'Item não encontrado.');
+  if (item.author_id === user.id || item.status === 'returned') throw new HttpError(409,'Este item não está disponível para contato.');
+  const target = await first(env,`SELECT CASE WHEN i.custody='campus' THEN s.sector_phone ELSE u.phone END AS phone
+    FROM items i JOIN users u ON u.id=i.author_id CROSS JOIN settings s WHERE i.id=? AND s.id=1`,item.id);
+  if (!/^\d{10,15}$/.test(target?.phone || '')) throw new HttpError(409,item.custody === 'campus'
+    ? 'O setor ainda não cadastrou o WhatsApp. Consulte o local de atendimento na ficha.' : 'O responsável ainda não cadastrou o WhatsApp.');
+  const previous = await first(env,`SELECT * FROM contacts WHERE requester_id=? AND item_id=? AND status IN ('pending','approved')`,user.id,item.id);
+  const contactId = previous?.id || crypto.randomUUID();
+  const assigned = item.status === 'reserved' && !item.reserved_contact_id && item.reserved_lost_id
+    ? await first(env,"SELECT id FROM items WHERE id=? AND kind='lost' AND author_id=? AND status='open' AND archived_at IS NULL",item.reserved_lost_id,user.id) : null;
+  if (item.status === 'reserved' && !assigned && (!previous || item.reserved_contact_id !== previous.id)) throw new HttpError(409,'Este item já está reservado.');
+  const explicit = input.lostId ? id(input.lostId) : null;
+  if (previous && explicit && previous.lost_id !== explicit) throw new HttpError(409,'Sua solicitação está vinculada a outra perda.');
+  if (assigned && ((explicit && explicit !== assigned.id) || (previous && previous.lost_id !== assigned.id))) throw new HttpError(409,'A reserva está vinculada a outra perda.');
+  let lostId = previous?.lost_id || assigned?.id || explicit;
+  if (!lostId) {
+    const prior = await first(env,`SELECT id FROM items WHERE kind='lost' AND author_id=? AND recovery_for_id=? AND status='open' AND archived_at IS NULL`,user.id,item.id);
+    lostId=prior?.id || null;
+  }
+  if (lostId && !previous) {
+    const loss = await loadItem(env,lostId);
+    if (!loss || loss.kind !== 'lost' || loss.author_id !== user.id || loss.category_id !== item.category_id || loss.status !== 'open' || loss.archived_at ||
+      (loss.recovery_for_id && loss.recovery_for_id !== item.id) || (loss.linked_reservation && !assigned) || loss.contact_count) throw new HttpError(409,'Esta perda já está vinculada ou foi encerrada.');
+  }
+  if (item.status === 'open' || assigned) {
+    await throttle(env,'whatsapp:' + user.id,20,3600);
+    const batch = [];
+    const version = nextUpdate(item);
+    // O primeiro UPDATE reivindica a reserva. Os demais comandos dependem dessa revisão e do autor.
+    batch.push(db(env,`UPDATE items SET status='reserved',reservation_name=?,updated_at=?,updated_by=?
+      WHERE id=? AND (status='open' OR (status='reserved' AND reserved_contact_id IS NULL AND reserved_lost_id=?)) AND updated_at=? AND archived_at IS NULL AND publication='public'
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM items l WHERE l.id=? AND l.status='open' AND l.archived_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM items r WHERE r.reserved_lost_id=l.id AND r.status='reserved' AND r.id<>?)))`,user.name,version,user.id,item.id,assigned?.id || null,item.updated_at,lostId,lostId,item.id));
+    const guard = "EXISTS(SELECT 1 FROM items f WHERE f.id=? AND f.updated_at=? AND f.updated_by=? AND f.status='reserved' AND f.reserved_contact_id IS NULL)";
+    const args = [item.id,version,user.id];
+    if (!lostId) {
+      lostId=crypto.randomUUID();
+      batch.push(db(env,`INSERT INTO items(id,kind,author_id,title,description,category_id,location,occurred_on,publication,search_text,fingerprint,recovery_for_id,updated_by)
+        SELECT ?,'lost',?,title,'Recuperação iniciada pelo WhatsApp.',category_id,location,occurred_on,'private',search_text,?,id,? FROM items WHERE id=? AND ${guard}`,
+        lostId,user.id,await digest('whatsapp:'+lostId),user.id,item.id,...args));
+    }
+    if (!previous) batch.push(db(env,`INSERT INTO contacts(id,item_id,requester_id,lost_id,message)
+      SELECT ?,?,?,?,'Contato iniciado pelo WhatsApp.' WHERE ${guard}`,contactId,item.id,user.id,lostId,...args));
+    batch.push(db(env,`UPDATE items SET reserved_contact_id=?,reserved_lost_id=? WHERE id=? AND ${guard}`,contactId,lostId,item.id,...args));
+    try { await env.DB.batch(batch); } catch(error) {
+      if (!/unique/i.test(error.message)) throw error;
+    }
+  }
+  const winner=await first(env,`SELECT c.id,c.lost_id AS lostId,i.title,CASE WHEN i.custody='campus' THEN s.sector_phone ELSE u.phone END AS phone
+    FROM items i JOIN contacts c ON c.id=i.reserved_contact_id JOIN users u ON u.id=i.author_id CROSS JOIN settings s
+    WHERE i.id=? AND i.status='reserved' AND i.publication='public' AND i.archived_at IS NULL AND c.requester_id=? AND c.status IN ('pending','approved') AND s.id=1`,item.id,user.id);
+  if (!winner || !/^\d{10,15}$/.test(winner.phone || '')) throw new HttpError(409,'A disponibilidade do item mudou. Abra a ficha novamente.');
+  return json({contactId:winner.id,lostId:winner.lostId,url:'https://wa.me/'+winner.phone+'?text='+encodeURIComponent(`Olá! Sou ${user.name}. Vi o item “${winner.title}” no sistema de Achados e Perdidos da Fatec e acredito que seja meu. Podemos combinar a devolução?`)});
+}
+
 const liveContact = "i.archived_at IS NULL AND i.status IN ('open','reserved')";
 const awaitingReview = `c.status = 'pending' AND ${liveContact} AND c.requester_id <> ?`;
 const awaitingPickup = `c.status = 'approved' AND ${liveContact} AND c.requester_id = ?`;
@@ -68,6 +128,8 @@ export async function contactSummary(env, user) {
     user.id,user.id,user.id,user.id,user.id,user.role,user.role,user.id);
   return json(counts);
 }
+
+const receivedByCustodian = (row,side) => side === 'received' && row.status === 'pending';
 
 export async function inbox(env, user, search) {
   requireUser(user);
@@ -111,7 +173,7 @@ export async function inbox(env, user, search) {
     const available = (!row.reserved_contact_id || row.reserved_contact_id === row.id) && (!row.reserved_lost_id || row.reserved_lost_id === row.lost_id);
     return {
       id: row.id, itemId: row.item_id, title: row.title, status: row.status, side, custody: row.custody,
-      itemUpdatedAt:row.item_updated_at, occurredOn:row.occurred_on,
+      whatsappReservation:row.status === 'pending' && row.id === row.reserved_contact_id, itemUpdatedAt:row.item_updated_at, occurredOn:row.occurred_on,
       pickup:row.can_plan ? pickupView(row) : null, canViewReceipt:row.status === 'delivered' && canViewReceipt(row,user),
       canViewItem: user.role === 'admin' || row.status === 'delivered' ||
         (!row.archived_at && (row.publication === 'public' || row.author_id === user.id)),
@@ -120,7 +182,7 @@ export async function inbox(env, user, search) {
       canDeliver: side === 'received' && live && available && ['pending','approved'].includes(row.status),
       canApprove: side === 'received' && live && available && row.status === 'pending',
       canRevoke: side === 'received' && approved && available,
-      phone: approved ? (side === 'received' ? row.requester_phone : row.custody === 'campus' ? row.sector_phone : row.author_phone) : null,
+      phone: (approved || (receivedByCustodian(row,side) && row.id === row.reserved_contact_id && live)) ? (side === 'received' ? row.requester_phone : row.custody === 'campus' ? row.sector_phone : row.author_phone) : null,
       sector: approved && row.custody === 'campus' ? { location: row.sector_location, hours: row.sector_hours } : null
     };
   }) });

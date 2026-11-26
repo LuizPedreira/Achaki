@@ -112,6 +112,7 @@ function filterClauses(search) {
 export async function listItems(env, search, { mode = 'public', user = null } = {}) {
   const { terms, params } = filterClauses(search);
   if (mode === 'public') terms.push("i.kind = 'found'", "i.publication = 'public'", 'i.archived_at IS NULL');
+  if (mode === 'public' && search.get('recent') === '1' && !search.get('status')) terms.push("i.status <> 'returned'");
   if (mode === 'mine') {
     terms.push('i.author_id = ?');
     params.push(requireUser(user).id);
@@ -157,6 +158,7 @@ export async function itemDetails(env, user, itemId) {
   const data = itemView(item);
   data.isMine = item.author_id === user?.id;
   data.canManage = manages(item, user);
+  if (data.canManage) Object.assign(data,{updatedAt:item.updated_at,reservedContactId:item.reserved_contact_id,reservedLostId:item.reserved_lost_id,reservationName:item.reservation_name});
   data.canViewReceipt = canViewReceipt(item,user);
   data.canRate = item.return_id && user && (item.author_id === user.id || item.recipient_id === user.id);
   if (data.canRate) data.rating = item.author_id === user.id ? item.finder_rating : item.recipient_rating;
@@ -170,8 +172,14 @@ export async function itemDetails(env, user, itemId) {
   }
   if (privileged && item.return_id) data.returnSummary = { returnedOn: item.returned_on, custody: item.custody };
   if (user && item.kind === 'found' && item.author_id !== user.id) {
+    data.contactName = item.custody === 'campus' ? 'Setor de Achados e Perdidos' : item.author_name;
     data.request = await first(env, 'SELECT id,status,lost_id AS lostId FROM contacts WHERE item_id = ? AND requester_id = ? ORDER BY created_at DESC LIMIT 1', item.id, user.id);
   }
+  data.reservedForMe = Boolean(user && item.status === 'reserved' && (
+    (data.request && item.reserved_contact_id === data.request.id) ||
+    (!item.reserved_contact_id && item.reserved_lost_id && await first(env,
+      "SELECT id FROM items WHERE id=? AND author_id=? AND status='open' AND archived_at IS NULL",item.reserved_lost_id,user.id))
+  ));
   return json({ item: data });
 }
 
@@ -206,12 +214,11 @@ export async function createItem(env, user, input) {
   const itemId = crypto.randomUUID();
   const statement = db(env, `INSERT INTO items
     (id,kind,author_id,title,description,category_id,location,occurred_on,custody,share_phone,search_text,fingerprint,publication,updated_by)
-    SELECT ?,?,?,?,?,?,?,?,?,?,?,?, CASE WHEN ? = 'lost' THEN 'private'
-      WHEN review_required = 1 AND ? = 'user' THEN 'pending' ELSE 'public' END, ?
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,?, CASE WHEN ? = 'lost' THEN 'private' ELSE 'public' END, ?
     FROM settings WHERE id = 1
     AND (SELECT count(*) FROM media WHERE owner_id = ? AND item_id IS NULL AND discard = 0
       AND created_at > ? AND id IN (SELECT value FROM json_each(?))) = ?`,
-    itemId, kind, user.id, ...itemValues(fields), kind, user.role, user.id, user.id, now() - 86400, JSON.stringify(photos), photos.length);
+    itemId, kind, user.id, ...itemValues(fields), kind, user.id, user.id, now() - 86400, JSON.stringify(photos), photos.length);
   const attachments = photos.map((photoId, index) => db(env, `UPDATE media SET item_id = ?, position = ?
     WHERE id = ? AND owner_id = ? AND item_id IS NULL AND discard = 0 AND EXISTS (SELECT 1 FROM items WHERE id = ?)`,
     itemId, index + 1, photoId, user.id, itemId));
