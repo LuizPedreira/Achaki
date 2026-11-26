@@ -247,3 +247,30 @@ body { font-family: Inter, system-ui, sans-serif; }
   .item-shell .detail-hero { position:relative; top:auto; }
   .detail-thumbs { margin:10px 0 0; }
 }
+
+/* Senhas e fotos usam o próprio campo para indicar o que pede atenção. */
+.password-field { display:grid; gap:6px; min-width:0; }
+.password-control { display:flex; align-items:stretch; min-width:0; background:#fff; border:1px solid #bdc9d4; border-radius:9px; }
+.password-control:focus-within { outline:2px solid #376eac; outline-offset:2px; }
+.mobile-shell .stack .password-control input, dialog .password-control input {
+  min-width:0; flex:1; width:100%; min-height:46px; padding:10px 12px; border:0!important; box-shadow:none; outline:0; border-radius:9px;
+}
+.password-toggle { flex:none; min-width:74px; min-height:44px; margin:1px; border:0; border-radius:7px; background:white; color:#304c69; font:650 14px/1 Inter,sans-serif; padding:0 12px; cursor:pointer; }
+.password-toggle:hover { background:#eef3f6; }
+.password-field small { font-size:13px; line-height:1.4; color:var(--muted); }
+.password-control:has([aria-invalid=true]) { border-color:#9a2636; }
+.field-error { font-size:14px; line-height:1.45; color:#912235; overflow-wrap:anywhere; }
+.field-error:empty { display:none; }
+.original-item-form .upload-zone { border-radius:14px; padding:clamp(14px,3vw,22px); }
+.original-item-form .upload-title { align-items:baseline; gap:12px; }
+#photo-total { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.original-item-form #photo-previews { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.original-item-form #photo-previews:empty { display:none; }
+.original-item-form .photo-preview { width:100%; height:auto; aspect-ratio:4/3; position:relative; }
+.original-item-form .photo-preview img { display:block; width:100%; height:100%; border-radius:8px; }
+.original-item-form .photo-preview .icon-button { right:3px;top:3px;min-width:32px;min-height:32px;padding:5px;border:1px solid #cad2d9;background:white;color:var(--ink); }
+.cover-label { position:absolute;left:4px;bottom:4px;background:#20374b;color:white;font:650 12px/1.2 Inter,sans-serif;padding:3px 7px;border-radius:4px; }
+.original-item-form .photo-action-btn:disabled { opacity:.5; cursor:default; }
+.original-item-form #photo-status { margin-top:10px; font-size:13px; line-height:1.45; }
+.original-item-form #photo-error:not(:empty) { border-left:3px solid #aa3244; margin-top:8px; padding:6px 10px; background:#fff4f5; }
+.original-item-form .draft-note { align-items:flex-start; line-height:1.5; }

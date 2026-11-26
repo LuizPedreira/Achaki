@@ -1,4 +1,4 @@
-const CACHE = 'achados-shell-v10';
+const CACHE = 'achados-shell-v11';
 const SHELL = ['/', '/styles.css', '/original.css', '/interface.css', '/app.js', '/icons.js', '/navigation.js', '/favicon.png', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/inter.woff2'];
 
 self.addEventListener('install', event => {

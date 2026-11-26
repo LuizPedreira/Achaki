@@ -122,22 +122,69 @@ function confirmAction(title, body, work, label = 'Confirmar') {
   onForm('#confirm-form', work);
 }
 
-function onForm(selector, work) {
+function passwordField(label, name, id, autocomplete, minLength = 0, hint = '') {
+  return `<div class="password-field"><label for="${id}">${label}</label><div class="password-control">
+    <input id="${id}" name="${name}" type="password" required maxlength="128" autocomplete="${autocomplete}" autocapitalize="none" spellcheck="false" ${minLength ? `minlength="${minLength}"` : ''} ${hint?`aria-describedby="${id}-hint"`:''}>
+    <button type="button" class="password-toggle" data-action="toggle-password" aria-controls="${id}" aria-label="Mostrar senha do campo ${label}">Mostrar</button></div>
+    ${hint?`<small id="${id}-hint">${hint}</small>`:''}${name==='confirm'?`<span id="${id}-error" class="field-error" aria-live="polite"></span>`:''}</div>`;
+}
+
+actions['toggle-password'] = button => {
+  const field = document.getElementById(button.getAttribute('aria-controls'));
+  if (!field || field.form !== button.form) return;
+  const show = field.type === 'password';
+  field.type = show ? 'text' : 'password';
+  const verb = show ? 'Ocultar' : 'Mostrar';
+  button.textContent = verb;
+  button.setAttribute('aria-label', verb+' senha do campo '+field.labels[0].textContent);
+};
+
+function clearConfirmationError(form) {
+  const field = form.elements.namedItem('confirm');
+  if (!field || !field.hasAttribute('aria-invalid')) return;
+  field.removeAttribute('aria-invalid');
+  field.removeAttribute('aria-describedby');
+  document.getElementById(field.id+'-error').textContent = '';
+}
+
+function passwordsMatch(form) {
+  const field = form.elements.namedItem('confirm');
+  if (!field || field.value === form.elements.namedItem('password').value) return true;
+  const message = document.getElementById(field.id+'-error');
+  message.textContent = 'As senhas estão diferentes. Confira a confirmação.';
+  field.setAttribute('aria-invalid','true');
+  field.setAttribute('aria-describedby',message.id);
+  field.focus();
+  return false;
+}
+
+function onForm(selector, work, busyLabel = '') {
   const form = qs(selector);
   if (!form) return;
+  let submitting = false;
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    const error = qs('.form-error', form);
     const button = qs('[type=submit]',form);
+    if (submitting || button?.disabled) return;
+    submitting = true;
+    const error = qs('.form-error', form);
     if (error) error.textContent = '';
-    if (button) button.disabled = true;
+    const buttonContent = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      if (busyLabel) button.textContent = busyLabel;
+    }
     try {
       await work(Object.fromEntries(new FormData(form)), form);
     } catch (failure) {
       if (error) error.textContent = failure.message;
       else notify(failure.message);
     } finally {
-      if (button) button.disabled = false;
+      submitting = false;
+      if (button) {
+        if (busyLabel) button.innerHTML = buttonContent;
+        button.disabled = false;
+      }
     }
   });
 }
@@ -292,9 +339,8 @@ function authPage(path, url) {
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
       ${!reset ? input('E-mail','email','','type="email" required maxlength="254" autocomplete="username" placeholder="voce@exemplo.com"') : ''}
       ${register ? input('Telefone / WhatsApp','phone','','type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
-      ${!forgot ? input('Senha','password','',`type="password" required ${login ? '' : 'minlength="10"'} maxlength="128" autocomplete="${login ? 'current-password' : 'new-password'}" ${login ? '' : 'aria-describedby="password-help"'}`) : ''}
-      ${register||reset?'<small id="password-help">Use pelo menos 10 caracteres.</small>':''}
-      ${register || reset ? input('Confirmar senha','confirm','', 'type="password" required minlength="10" maxlength="128" autocomplete="new-password"') : ''}
+      ${!forgot ? passwordField('Senha','password','auth-password',login?'current-password':'new-password',login?0:10,login?'':'Use pelo menos 10 caracteres.') : ''}
+      ${register||reset ? passwordField('Confirmar senha','confirm','auth-confirm','new-password',10) : ''}
       ${login ? `<div class="auth-options"><label class="check"><input type="checkbox" name="remember">Lembrar de mim</label>
         ${link('/recuperar-senha','Esqueci a senha',{ cls:'text-link' })}</div>` : ''}
       ${register?`<label class="check"><input name="terms" type="checkbox" required><span>Li e aceito as ${btn('show-terms','orientações de uso','','link-button')} e as informações sobre privacidade.</span></label>`:''}
@@ -302,9 +348,12 @@ function authPage(path, url) {
     ${login && session.features.sso ? `<a href="/api/auth/microsoft?next=${encodeURIComponent(next || '/')}" class="button secondary institutional">${icon('building')}Entrar com a conta institucional</a>` : ''}
     <p class="auth-bottom">${login ? 'Não tem conta? ' + link(`/cadastro${target}`,'Criar conta',{ cls:'text-link' }) :
       register ? 'Já tem conta? ' + link(`/entrar${target}`,'Entrar',{ cls:'text-link' }) : ''}</p></div></section>`,{ auth:true });
+  if (register || reset) qs('#auth-form').addEventListener('input',event=>{
+    if (['password','confirm'].includes(event.target.name)) clearConfirmationError(event.currentTarget);
+  });
   onForm('#auth-form', async (data, form) => {
     if (register && data.terms !== 'on') throw new Error('Leia e aceite as orientações antes de continuar.');
-    if ((register || reset) && data.password !== data.confirm) throw new Error('As senhas precisam ser iguais.');
+    if ((register || reset) && !passwordsMatch(form)) return;
     if (forgot) {
       await api('/auth/forgot',{ method:'POST',body:data });
       form.innerHTML = `<div class="notice success">Se o e-mail estiver cadastrado, você receberá um link para trocar a senha.</div>${link('/entrar','Voltar para o login')}`;
@@ -321,7 +370,7 @@ function authPage(path, url) {
     session.user = result.user;
     notify(register ? 'Conta criada.' : `Olá, ${result.user.name.split(' ')[0]}!`);
     go(next || (result.user.role === 'admin' ? '/painel' : '/'),{ replace:true });
-  });
+  },login?'Entrando…':register?'Criando conta…':forgot?'Enviando…':'Salvando…');
 }
 
 async function detail(itemId, token) {
@@ -459,14 +508,15 @@ function itemForm(kind, url) {
       ${btn('photo-file','<span><b>Escolher foto</b><small>Galeria ou arquivos</small></span>','camera','photo-action-btn')}
       ${btn('photo-capture','<span><b>Usar câmera</b><small>Em celulares compatíveis</small></span>','camera','photo-action-btn')}
       <input type="file" id="photo-files" accept="image/*" multiple hidden><input type="file" id="photo-camera" accept="image/*" capture="environment" hidden></div>
-      <div class="photo-message">As fotos são redimensionadas automaticamente.</div></div>
+      <div class="photo-message" id="photo-status" role="status">Até 20 MB por foto.</div>
+      <div class="field-error" id="photo-error" role="alert"></div></div>
     ${input(found?'Título do item':'O que você perdeu?','title',draft.title,'class="control" required minlength="3" maxlength="90"')}
     ${textarea('Descrição','description',draft.description,'class="control" required minlength="8" maxlength="1200"')}
     <div class="grid2">${select('Categoria','categoryId',categoryOptions(),draft.categoryId,'class="control" required')}
     ${input(found?'Data do encontro':'Data aproximada','occurredOn',draft.occurredOn||today(),`class="control" type="date" required max="${today()}"`)}</div>
     ${select(found?'Local onde foi encontrado':'Onde acha que perdeu? (opcional)','location',pointOptions,draft.location,found?'class="control" required':'class="control"')}
     ${found?`<fieldset class="field"><legend>Onde o item está agora?</legend><div class="choice-grid"><label class="choice-card"><input type="radio" name="custody" value="finder" ${checked(draft.custody==='finder')}><b>Está comigo</b><span>Quem perdeu poderá combinar a retirada com você.</span></label><label class="choice-card"><input type="radio" name="custody" value="campus" ${checked(draft.custody!=='finder')}><b>Entreguei na Fatec</b><span>O item está no setor de Achados e Perdidos.</span></label></div></fieldset>`:`<label class="record-card row between"><span><b>Compartilhar meu contato</b><small>Permite que a equipe fale com você.</small></span><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone==='on')}></label>`}
-    <small class="draft-note">${icon('check')} Rascunho salvo automaticamente nesta aba</small>
+    <small class="draft-note">${icon('check')} Os campos ficam salvos nesta aba. Se recarregar a página, escolha as fotos novamente.</small>
     ${found?'<div class="notice green">Ao publicar, o item aparece imediatamente na busca.</div>':''}
     <div class="form-error" role="alert"></div>${submit(found?'Publicar registro':'Registrar solicitação')}</form>`);
   drawPhotos();
@@ -481,59 +531,83 @@ function itemForm(kind, url) {
   onForm('#item-form', async data => {
     const formDraft = photoDraft;
     const photos = [...formDraft.photos];
-    if (found && !photos.length) throw new Error('Adicione pelo menos uma foto do item.');
-    if (formDraft.busy) throw new Error('Aguarde o processamento da foto.');
+    if (formDraft.busy) return;
+    if (found && !photos.length) {
+      formDraft.error = 'Escolha pelo menos uma foto do objeto para publicar.';
+      drawPhotos();
+      qs('[data-action="photo-file"]',form).focus();
+      return;
+    }
     formDraft.busy = true;
+    formDraft.error = '';
+    formDraft.status = 'Salvando o registro…';
     drawPhotos();
     let response;
     try {
       const ids = [];
-      for (const photo of photos) {
+      for (const [index,photo] of photos.entries()) {
+        formDraft.status = `Enviando foto ${index+1} de ${photos.length}…`;
+        if (formDraft===photoDraft) drawPhotos();
         if (!photo.id) photo.id = (await api('/media',{ method:'POST',body:photo.blob })).id;
         ids.push(photo.id);
       }
+      formDraft.status = 'Salvando o registro…';
+      if (formDraft===photoDraft) drawPhotos();
       response = await api('/items',{ method:'POST',body:{ ...data,kind,photos:ids,sharePhone:data.sharePhone === 'on' } });
     } catch (error) {
       if (error.message.includes('foto expirou')) for (const photo of photos) photo.id = null;
       throw error;
     } finally {
       formDraft.busy = false;
+      formDraft.status = '';
       drawPhotos();
     }
-    try { sessionStorage.removeItem(draftKey(kind)); } catch {}
-    clearPhotoDraft();
+    try { sessionStorage.removeItem(formDraft.key); } catch {}
+    if (formDraft===photoDraft) clearPhotoDraft();
+    if (!form.isConnected) return;
     notify(found ? (response.item.publication === 'pending' ? 'Item enviado para revisão.' : 'Item publicado.') : 'Perda registrada.');
     go('/meus-registros');
     modal(found?'Registro publicado com sucesso':'Solicitação registrada com sucesso',`<p>${found?'O item já está disponível na busca.':e(response.item.title)}</p>${found?`<p><b>${e(response.item.title)}</b><br>Em aberto · ${e(response.item.location)}</p>`:''}<div class="form-actions">${found?link(itemHref(response.item.id),'Ver registro',{cls:'btn full'}):link('/','Voltar ao início',{cls:'btn secondary'})}${link('/meus-registros','Meus registros',{cls:'btn secondary'})}</div>`);
 
-  });
+  },found?'Publicando…':'Registrando…');
 }
 
 function clearPhotoDraft(kind) {
   for (const photo of photoDraft?.photos || []) URL.revokeObjectURL(photo.url);
-  photoDraft = kind ? { key:draftKey(kind),photos:[],busy:false } : null;
+  photoDraft = kind ? { key:draftKey(kind),photos:[],busy:false,status:'',error:'' } : null;
 }
 
 function drawPhotos() {
   const preview = qs('#photo-previews');
   if (!preview || !photoDraft) return;
-  qs('#photo-total').textContent = `${photoDraft.photos.length}/3`;
-  preview.innerHTML = photoDraft.photos.map((photo,index) =>
-    `<div class="photo-preview"><img src="${e(photo.url)}" alt="Foto ${index + 1}">
-    ${btn('remove-photo','', 'x','icon-button',`aria-label="Remover foto ${index + 1}" data-index="${index}" ${photoDraft.busy ? 'disabled' : ''}`)}</div>`).join('');
-  document.querySelectorAll('#photo-files,#photo-camera').forEach(input => { input.disabled = photoDraft.busy || photoDraft.photos.length >= 3; });
+  const {photos,busy,status,error} = photoDraft;
+  qs('#photo-total').textContent = `${photos.length}/3`;
+  qs('#photo-status').textContent = status || (photos.length===3?'Três fotos selecionadas. Remova uma para trocar.':'Até 20 MB por foto.');
+  qs('#photo-error').textContent = error || '';
+  preview.innerHTML = photos.map((photo,index) =>
+    `<div class="photo-preview"><img src="${e(photo.url)}" alt="Foto ${index+1} do objeto">
+    ${index===0?'<span class="cover-label">Capa</span>':''}
+    ${btn('remove-photo','', 'x','icon-button',`aria-label="Remover foto ${index+1}" data-index="${index}" ${busy?'disabled':''}`)}</div>`).join('');
+  const unavailable = busy || photos.length>=3;
+  document.querySelectorAll('#photo-files,#photo-camera,[data-action="photo-file"],[data-action="photo-capture"]').forEach(control=>{control.disabled=unavailable;});
+  const publish=qs('#item-form [type=submit]');
+  if (publish) publish.disabled=busy;
 }
 
 actions['remove-photo'] = button => {
-  const [removed] = photoDraft.photos.splice(Number(button.dataset.index),1);
+  if (!photoDraft || photoDraft.busy) return;
+  const index=Number(button.dataset.index);
+  const [removed] = photoDraft.photos.splice(index,1);
+  photoDraft.error='';
   if (removed) URL.revokeObjectURL(removed.url);
   drawPhotos();
+  const remaining=document.querySelectorAll('[data-action="remove-photo"]');
+  (remaining[Math.min(index,remaining.length-1)] || qs('[data-action="photo-file"]'))?.focus();
 };
 
 async function compress(photo, maxSide = 1200, maxBytes = 480_000) {
-  if (!photo.type.startsWith('image/') || photo.type === 'image/svg+xml' || photo.size > 20_000_000) {
-    throw new Error('Escolha uma foto com até 20 MB.');
-  }
+  if (photo.size > 20_000_000) throw new Error('A foto ultrapassa 20 MB. Escolha uma imagem menor.');
+  if (!photo.type.startsWith('image/') || photo.type === 'image/svg+xml') throw new Error('Escolha uma imagem em JPG, PNG ou WebP.');
   const blobUrl = URL.createObjectURL(photo);
   try {
     const image = new Image();
@@ -564,21 +638,31 @@ async function acceptPhotos(input) {
   if (!draft || draft.busy) return;
   const photos = Array.from(input.files);
   input.value = '';
-  const available = 3 - draft.photos.length;
-  if (photos.length > available) notify('São permitidas até três fotos.');
-  draft.busy = true;
+  if (!photos.length) return;
+  const warnings=[];
+  draft.error='';
+  draft.status='Preparando fotos…';
+  draft.busy=true;
   drawPhotos();
   try {
-    for (const file of photos.slice(0,available)) {
-      const blob = await compress(file);
-      if (draft !== photoDraft) break;
-      draft.photos.push({ blob, url:URL.createObjectURL(blob), id:null });
+    for (const file of photos) {
+      if (draft!==photoDraft) break;
+      if (draft.photos.length>=3) {
+        warnings.push('O limite é de três fotos por registro.');
+        break;
+      }
+      try {
+        const blob=await compress(file);
+        if (draft===photoDraft) draft.photos.push({blob,url:URL.createObjectURL(blob),id:null});
+      } catch (error) {
+        warnings.push(file.name+' — '+error.message);
+      }
     }
-  } catch (error) {
-    notify(error.message);
+    draft.error=warnings.join(' ');
   } finally {
-    draft.busy = false;
-    drawPhotos();
+    draft.busy=false;
+    draft.status='';
+    if (draft===photoDraft) drawPhotos();
   }
 }
 
@@ -875,12 +959,15 @@ function firstAdmin() {
 
 actions['change-password'] = () => {
   modal('Alterar senha', `<form class="stack" id="password-form">
-    ${input('Senha atual','currentPassword','','type="password" autocomplete="current-password" required maxlength="128"')}
-    ${input('Nova senha','password','','type="password" autocomplete="new-password" required minlength="10" maxlength="128"')}
-    ${input('Confirmar nova senha','confirm','','type="password" autocomplete="new-password" required minlength="10" maxlength="128"')}
+    ${passwordField('Senha atual','currentPassword','profile-current','current-password')}
+    ${passwordField('Nova senha','password','profile-password','new-password',10,'Use pelo menos 10 caracteres.')}
+    ${passwordField('Confirmar nova senha','confirm','profile-confirm','new-password',10)}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Alterar senha','check')}</div></form>`);
-  onForm('#password-form', async data => {
-    if (data.password !== data.confirm) throw new Error('As senhas precisam ser iguais.');
+  qs('#password-form').addEventListener('input',event=>{
+    if (['password','confirm'].includes(event.target.name)) clearConfirmationError(event.currentTarget);
+  });
+  onForm('#password-form', async (data,form) => {
+    if (!passwordsMatch(form)) return;
     await api('/profile/password',{ method:'POST',body:data });
     session.user = null;
     clearPhotoDraft();
