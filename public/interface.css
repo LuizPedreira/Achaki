@@ -189,3 +189,61 @@ body { font-family: Inter, system-ui, sans-serif; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
 }
+
+/* Mural e ficha compartilham o mesmo espaçamento entre ferramentas e conteúdo. */
+.home-view .quick-card { position:relative; border:1px solid rgb(0 0 0 / 7%); align-items:flex-start; }
+.home-view .quick-card small { color:rgb(255 255 255 / 90%); }
+.home-view .quick-card .quick-icon { border:1px solid rgb(255 255 255 / 20%); }
+.home-view .red-card { background:#a42233; }
+.home-view .dark-card { background:#20374b; }
+#catalog-results { min-width:0; }
+.catalog-categories { display:flex; overflow-x:auto; gap:4px; padding:0; margin:19px 0 0; border-bottom:1px solid var(--line); scrollbar-width:thin; scrollbar-color:#bbc7d1 transparent; }
+.mobile-shell .catalog-categories .chip {
+  flex:none; display:inline-flex; align-items:center; min-height:43px; margin:0;
+  border:0; border-radius:0; border-bottom:3px solid transparent; padding:8px 10px;
+  color:#4e6071; background:transparent; font-size:13px; font-weight:575;
+}
+.mobile-shell .catalog-categories .chip.active { color:var(--red-dark); border-bottom-color:var(--red); background:transparent; font-weight:710; }
+.mobile-shell .catalog-categories .chip:focus-visible { outline-offset:-3px; }
+.home-view .section-head { min-height:36px; margin:17px 0 12px; }
+.home-view .section-head > div { display:flex; align-items:baseline; flex-wrap:wrap; gap:3px 12px; }
+.home-view .section-head h2 { margin:0; font-size:clamp(18px,2.6vw,23px); line-height:1.25; letter-spacing:-.04em; }
+.result-count { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.applied-filters { display:flex; flex-wrap:wrap; gap:6px; padding:12px 0 0; }
+.applied-filter { display:inline-flex; align-items:center; gap:8px; border:1px solid #cdd8e0; border-radius:6px; padding:6px 9px; text-decoration:none; font-size:13px; color:#32485e; background:#edf2f6; }
+.applied-filter .icon { width:13px; height:13px; }
+#catalog-results[aria-busy="true"] .result-count { opacity:.58; }
+.home-view .item-card { padding-block:16px; }
+.catalog-name .item-title { margin-top:4px; }
+.catalog-meta .small-info { line-height:1.45; }
+.home-view .item-list .empty { border:0; border-radius:12px; padding:32px 18px; background:transparent; }
+.detail-media { min-width:0; }
+.item-shell .hero-open { position:relative; cursor:zoom-in; }
+.hero-open .photo-hint { position:absolute; right:12px; bottom:12px; display:flex; align-items:center; gap:7px; padding:7px 11px; color:white; background:rgb(24 37 50 / 90%); border-radius:7px; font:600 12px/1.25 Inter,sans-serif; }
+.photo-hint .icon { width:15px; height:15px; }
+.detail-thumbs { display:flex; gap:8px; margin:-6px 0 18px; }
+.detail-thumbs button { flex:0 0 60px; height:52px; padding:2px; border-radius:8px; border:1px solid #bac6d0; background:white; cursor:zoom-in; }
+.detail-thumbs img { width:100%; height:100%; object-fit:cover; border-radius:5px; }
+.item-shell .detail-info { margin-top:17px; }
+.item-shell .info-row > .icon { width:18px; height:18px; color:#516d82; flex:none; }
+.item-shell .contact-box { border-top:3px solid #367756; }
+.prototype-sheet .dialog-head { border-bottom:1px solid var(--line); }
+.prototype-sheet .dialog-body legend { font-size:14px; color:var(--ink); }
+.prototype-sheet .chip { min-height:36px; align-items:center; }
+.prototype-sheet .form-actions { padding-top:8px; }
+@media (hover:hover) {
+  .mobile-shell .catalog-categories .chip:hover { background:#e9eef2; color:var(--ink); }
+  .applied-filter:hover,.detail-thumbs button:hover { border-color:#75889a; }
+  .home-view .quick-card.red-card:hover { background:#8e1d2c; }
+  .home-view .quick-card.dark-card:hover { background:#2e4559; }
+}
+@media (min-width:620px) {
+  .home-view .quick-card { min-height:92px; align-items:center; padding-inline:22px; }
+  .home-view .catalog-categories { margin-top:24px; gap:9px; }
+  .home-view .item-card { column-gap:18px; }
+}
+@media (min-width:900px) {
+  .item-shell .detail-media { position:sticky; top:24px; }
+  .item-shell .detail-hero { position:relative; top:auto; }
+  .detail-thumbs { margin:10px 0 0; }
+}

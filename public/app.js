@@ -21,6 +21,7 @@ const selected = (value, expected) => value === expected ? 'selected' : '';
 const checked = value => value ? 'checked' : '';
 const actions = Object.create(null);
 let navigation = 0;
+let catalogSearchTimer;
 let toastTimer;
 let previousFocus;
 let photoDraft = null;
@@ -55,9 +56,10 @@ function notify(message) {
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 4200);
 }
 
-function go(path, { replace = false, keepScroll = false } = {}) {
+function go(path, { replace = false, keepScroll = false, entryState = null } = {}) {
+  clearTimeout(catalogSearchTimer);
   if (dialog.open) dialog.close();
-  if (location.pathname + location.search !== path || location.hash) history[replace ? 'replaceState' : 'pushState'](null, '', path);
+  if (location.pathname + location.search !== path || location.hash) history[replace ? 'replaceState' : 'pushState'](entryState, '', path);
   if (!keepScroll) window.scrollTo(0, 0);
   void render().then(() => {
     if (!keepScroll) qs('#conteudo')?.focus({ preventScroll:true });
@@ -176,33 +178,66 @@ function card(item, lostId = '') {
 async function home(url,token) {
   const params=new URLSearchParams(url.searchParams);
   params.set('recent','1');
+  const previousResults=qs('#catalog-results');
+  previousResults?.setAttribute('aria-busy','true');
   const data=await api('/items?'+params);
   if(token!==navigation)return;
   const path=url.pathname+url.search,category=url.searchParams.get('category')||'';
   const person=session.user;
   const top=person ? `<div class="row"><div class="avatar">${e(initial(person.name))}</div><div class="user-hello"><b>Olá, ${e(person.name.split(' ')[0])}</b><span>Encontrou ou perdeu algo hoje?</span></div></div>${link(person.role==='admin'?'/painel':contactsPage,icon(person.role==='admin'?'dashboard':'bell'),{cls:'icon-btn',attrs:'aria-label="Abrir solicitações ou painel"'})}` :
     `<div class="brand-mini"><div class="brand-mark">${icon('box')}</div><div><h1 class="brand-title"><span class="handheld-brand">Achados &amp; Perdidos</span><span class="desktop-title">Mural de achados</span></h1><div class="brand-sub">${e(session.campus)}</div></div></div>${link('/entrar','Entrar',{cls:'login-pill'})}`;
-  const chips=[{id:'',name:'Todos'},...session.categories.slice(0,4)].map(c=>link(withQuery(path,'category',c.id),e(c.name),{cls:'chip'+(category===c.id?' active':'')})).join('');
+  const chips=[{id:'',name:'Todos'},...session.categories].map(c=>link(withQuery(path,'category',c.id),e(c.name),{cls:'chip'+(category===c.id?' active':''),attrs:category===c.id?'aria-current="true"':''})).join('');
   const rows=data.items.map(item=>link(itemHref(item.id),`
     <span class="item-photo">${cover(item)}</span>
     <span class="catalog-name"><span class="item-kicker">${e(item.category)}</span><strong class="item-title">${e(item.title)}</strong></span>
     <span class="catalog-meta">${rowInfo('pin',item.location)}${rowInfo('calendar',niceDate(item.occurredOn))}</span>
     ${badge(item.status)}<span class="catalog-chevron" aria-hidden="true">${icon('chev')}</span>`,{cls:'item-card'})).join('');
+  const filterLabels=[
+    ['status',statusText[params.get('status')]],['location',params.get('location')],
+    ['from',params.get('from')?'Desde '+niceDate(params.get('from')):''],
+    ['to',params.get('to')?'Até '+niceDate(params.get('to')):'']
+  ].filter(([key,label])=>params.has(key)&&label);
+  const filtered=Boolean(category||params.get('q')||filterLabels.length);
+  const activeFilters=filterLabels.map(([key,label])=>link(withQuery(path,key,''),e(label)+icon('x'),{
+    cls:'applied-filter',attrs:`aria-label="Remover filtro ${e(label)}"`})).join('');
+  const heading=filtered?'Resultados da busca':'Itens encontrados recentemente';
+  const count=data.total===1?'1 item':data.total+' itens';
+  const results=`<nav class="chips catalog-categories" aria-label="Categorias">${chips}</nav>
+    ${activeFilters?`<div class="applied-filters">${activeFilters}</div>`:''}
+    <div class="section-head"><div><h2>${heading}</h2><span class="result-count" role="status">${count}</span></div>${filtered?link('/','Limpar busca',{cls:'link'}):''}</div>
+    <div class="item-list" id="homeItems">${rows||empty(filtered?'Nenhum item encontrado':'Ainda não há itens no mural',filtered?'Tente outro termo ou remova um filtro.':'Os itens publicados aparecerão aqui.','','search')}</div>${pager(path,data)}`;
+  if(previousResults) {
+    previousResults.innerHTML=results;
+    previousResults.removeAttribute('aria-busy');
+    const field=qs('#search-form input');
+    if(field.value.trim()!==(params.get('q')||'')) field.value=params.get('q')||'';
+    return;
+  }
   site.innerHTML=shell(`<div class="mobile-top">${top}</div><form class="search-row" id="search-form" role="search"><div class="search-box">${icon('search')}<input class="control" name="q" type="search" aria-label="Buscar por palavra-chave" placeholder="Buscar por palavra-chave" value="${e(params.get('q')||'')}"></div>${btn('filters','','filter','filter-square','aria-label="Filtros"')}</form>
     <div class="quick-grid">${link('/novo/found','<span class="quick-icon">'+icon('plus')+'</span><span><b>Encontrei um item</b><small>Registrar achado</small></span>',{cls:'quick-card red-card'})}
     ${link('/novo/lost','<span class="quick-icon">'+icon('search')+'</span><span><b>Perdi um item</b><small>Abrir solicitação</small></span>',{cls:'quick-card dark-card'})}</div>
-    <div class="chips">${chips}</div><div class="section-head"><h3>Itens encontrados recentemente</h3>${link('/','Ver todos',{cls:'link'})}</div>
-    <div class="item-list" id="homeItems">${rows||'<div class="empty">Nenhum item encontrado com esses filtros.</div>'}</div>${pager(path,data)}`,{home:true});
+    <section id="catalog-results" aria-label="Objetos encontrados">${results}</section>`,{home:true});
   const search=qs('#search-form input');
-  let delay;
-  const run=()=>{clearTimeout(delay);go(withQuery(path,'q',search.value.trim()),{keepScroll:true});};
-  search.addEventListener('input',()=>{clearTimeout(delay);delay=setTimeout(()=>{if(search.isConnected)run();},350);});
+  const run=()=>{
+    clearTimeout(catalogSearchTimer);
+    if(!search.isConnected || location.pathname!=='/')return;
+    const next=withQuery(location.pathname+location.search,'q',search.value.trim());
+    history.replaceState(null,'',next);
+    void render();
+  };
+  search.addEventListener('input',()=>{
+    if(location.pathname!=='/')return;
+    clearTimeout(catalogSearchTimer);
+    ++navigation;
+    qs('#catalog-results').setAttribute('aria-busy','true');
+    catalogSearchTimer=setTimeout(run,280);
+  });
   onForm('#search-form',run);
-  if(params.has('q') && document.activeElement===document.body){ search.focus({preventScroll:true}); }
 }
 
 actions.filters = () => {
   const params = new URLSearchParams(location.search);
+  params.set('q',qs('#search-form input')?.value.trim()||'');
   const choices = (name,options) => `<div class="chips">${options.map(([value,label]) => `<label class="chip"><input type="radio" name="${name}" value="${e(value)}" ${checked(value===(params.get(name)||''))}>${e(label)}</label>`).join('')}</div>`;
   modal('Filtrar itens', `<form class="stack" id="filters-form">
     <fieldset><legend>Categoria</legend>${choices('category',categoryOptions('Todas'))}</fieldset>
@@ -307,7 +342,11 @@ async function detail(itemId, token) {
   else if(item.status==='reserved'&&!item.reservedForMe)contact='<h3>Item reservado</h3><p>Outro possível proprietário já está combinando a devolução.</p>';
   else contact=`<div class="contact-head"><div><h3>${item.reservedForMe?'Contato em andamento':'Entrar em contato'}</h3><span>Ao abrir o WhatsApp, sua solicitação fica registrada.</span></div></div>
     <div class="contact-owner"><div class="avatar">${e(initial(item.contactName))}</div><div><b>${e(item.contactName)}</b><span>${item.custody==='campus'?'Setor responsável pela guarda':'Pessoa que encontrou o item'}</span></div></div>${whatsappButton}<p id="contact-error" role="alert"></p>`;
-  site.innerHTML=shell(`<div class="detail-hero"><button class="hero-open" data-action="gallery" data-index="0" aria-label="Ampliar foto">${cover(item)}</button><div class="detail-actions">${link('/',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}${btn('share','','share','icon-btn','aria-label="Compartilhar"')}</div></div>
+  const catalogReturn=safePath(history.state?.catalogOrigin,'/');
+  const photos=item.photos||[];
+  const gallery=photos.length?`<button class="hero-open" data-action="gallery" data-index="0" aria-label="Ampliar foto de ${e(item.title)}">${cover(item)}<span class="photo-hint">${icon('image')}${photos.length===1?'Ampliar foto':`Ver ${photos.length} fotos`}</span></button>`:cover(item);
+  const thumbnails=photos.length>1?`<div class="detail-thumbs" role="group" aria-label="Fotos do objeto">${photos.map((src,i)=>`<button type="button" data-action="gallery" data-index="${i}" aria-label="Ampliar foto ${i+1} de ${photos.length}"><img src="${e(src)}" alt="" decoding="async"></button>`).join('')}</div>`:'';
+  site.innerHTML=shell(`<div class="detail-media"><div class="detail-hero">${gallery}<div class="detail-actions">${link(catalogReturn,icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar ao mural" data-catalog-return'})}${btn('share','','share','icon-btn','aria-label="Compartilhar"')}</div></div>${thumbnails}</div>
     <div class="detail-content"><div class="row between">${badge(item.status)}<span class="detail-code">Código #${e(item.id.slice(0,8).toUpperCase())}</span></div><h1 class="detail-title">${e(item.title)}</h1><p class="detail-description">${e(item.description)}</p>
     <div class="detail-info">${info('box','Categoria',item.category)}${info('pin','Local onde foi encontrado',item.location)}${info('calendar','Data do encontro',niceDate(item.occurredOn))}</div>
     <div class="current-location">${icon('box')}<div><b>Onde o item está agora</b><br>${active?e(custodyText[item.custody]):'Item já devolvido ao proprietário'}${active && item.custody==='campus' && session.sector.location?' · '+e(session.sector.location):''}</div></div><section class="contact-box">${contact}</section></div>`,{detail:true});
@@ -1153,7 +1192,21 @@ document.addEventListener('click', async event => {
   const pageLink = event.target.closest('a[data-nav]');
   if (pageLink && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
     event.preventDefault();
-    go(pageLink.pathname + pageLink.search);
+    if(pageLink.hasAttribute('data-catalog-return') && history.state?.catalogOrigin===pageLink.pathname+pageLink.search) {
+      history.back();
+      return;
+    }
+    if(location.pathname==='/' && pageLink.classList.contains('item-card')) {
+      history.replaceState({...history.state,catalogScroll:window.scrollY},'',location.href);
+      go(pageLink.pathname+pageLink.search,{entryState:{catalogOrigin:location.pathname+location.search}});
+      return;
+    }
+    const inCatalog=!!pageLink.closest('#catalog-results')&&pageLink.pathname==='/';
+    let destination=pageLink.pathname+pageLink.search;
+    if(inCatalog && pageLink.matches('.chip,.applied-filter')) {
+      destination=withQuery(destination,'q',qs('#search-form input').value.trim());
+    }
+    go(destination,{keepScroll:inCatalog});
     return;
   }
   const button = event.target.closest('[data-action]');
@@ -1168,7 +1221,13 @@ document.addEventListener('click', async event => {
   }
 });
 
-window.addEventListener('popstate',() => { if (dialog.open) dialog.close(); void render(); });
+window.addEventListener('popstate',async () => {
+  clearTimeout(catalogSearchTimer);
+  if(dialog.open) dialog.close();
+  const url=location.href, scroll=history.state?.catalogScroll;
+  await render();
+  if(location.href===url && location.pathname==='/' && Number.isFinite(scroll)) window.scrollTo(0,scroll);
+});
 window.addEventListener('beforeinstallprompt',event => {
   event.preventDefault();
   installPrompt = event;
