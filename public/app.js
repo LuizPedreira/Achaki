@@ -93,8 +93,8 @@ function shell(content,{auth=false,home=false,detail=false}={}) {
   const path=location.pathname;
   const nav=(href,name,symbol,main=false)=>link(href,(main?`<span class="nav-main">${icon(symbol)}</span>`:icon(symbol))+`<span>${name}</span>`,
     {cls:'nav-item'+(path===href?' active':''),attrs:path===href?'aria-current="page"':''});
-  const dock=`<nav class="bottom-nav" aria-label="Navegação principal">${nav('/','Início','home')}${nav('/novo/lost','Perdi algo','search')}${nav('/novo/found','Registrar','plus',true)}${nav('/meus-registros','Registros','list')}${nav('/perfil','Perfil','user')}</nav>`;
-  return `<div class="mobile-shell"><main id="conteudo" tabindex="-1" class="mobile-page${auth?' white no-nav':detail?' detail-page no-nav':''}">${content}</main>${auth||detail?'':dock}</div>`;
+  const dock=`<nav class="bottom-nav" aria-label="Navegação principal"><div class="rail-brand"><span class="rail-mark">${icon('box')}</span><div><strong>Achados &amp; Perdidos</strong>${session.campus?`<small>${e(session.campus)}</small>`:''}</div></div>${nav('/','Início','home')}${nav('/novo/lost','Perdi algo','search')}${nav('/novo/found','Registrar','plus',true)}${nav('/meus-registros','Registros','list')}${nav('/perfil','Perfil','user')}</nav>`;
+  return `<div class="mobile-shell ${auth?'auth-shell':detail?'item-shell':'workspace-shell'}"><main id="conteudo" tabindex="-1" class="mobile-page${home?' home-view':''}${auth?' white no-nav':detail?' detail-page no-nav':''}">${content}</main>${auth||detail?'':dock}</div>`;
 }
 
 function header(title, description, actions = '', kicker = '') {
@@ -181,14 +181,18 @@ async function home(url,token) {
   const path=url.pathname+url.search,category=url.searchParams.get('category')||'';
   const person=session.user;
   const top=person ? `<div class="row"><div class="avatar">${e(initial(person.name))}</div><div class="user-hello"><b>Olá, ${e(person.name.split(' ')[0])}</b><span>Encontrou ou perdeu algo hoje?</span></div></div>${link(person.role==='admin'?'/painel':contactsPage,icon(person.role==='admin'?'dashboard':'bell'),{cls:'icon-btn',attrs:'aria-label="Abrir solicitações ou painel"'})}` :
-    `<div class="brand-mini"><div class="brand-mark">${icon('box')}</div><div><div class="brand-title">Achados &amp; Perdidos</div><div class="brand-sub">${e(session.campus)}</div></div></div>${link('/entrar','Entrar',{cls:'login-pill'})}`;
+    `<div class="brand-mini"><div class="brand-mark">${icon('box')}</div><div><h1 class="brand-title"><span class="handheld-brand">Achados &amp; Perdidos</span><span class="desktop-title">Mural de achados</span></h1><div class="brand-sub">${e(session.campus)}</div></div></div>${link('/entrar','Entrar',{cls:'login-pill'})}`;
   const chips=[{id:'',name:'Todos'},...session.categories.slice(0,4)].map(c=>link(withQuery(path,'category',c.id),e(c.name),{cls:'chip'+(category===c.id?' active':'')})).join('');
-  const rows=data.items.map(i=>link(itemHref(i.id),`<div class="item-photo">${cover(i)}</div><div><div class="row between"><span class="item-kicker">${e(i.category)}</span>${badge(i.status)}</div><div class="item-title">${e(i.title)}</div><div class="item-meta">${icon('pin')} ${e(i.location)} &nbsp; ${icon('calendar')} ${niceDate(i.occurredOn)}</div></div>`,{cls:'item-card'})).join('');
+  const rows=data.items.map(item=>link(itemHref(item.id),`
+    <span class="item-photo">${cover(item)}</span>
+    <span class="catalog-name"><span class="item-kicker">${e(item.category)}</span><strong class="item-title">${e(item.title)}</strong></span>
+    <span class="catalog-meta">${rowInfo('pin',item.location)}${rowInfo('calendar',niceDate(item.occurredOn))}</span>
+    ${badge(item.status)}<span class="catalog-chevron" aria-hidden="true">${icon('chev')}</span>`,{cls:'item-card'})).join('');
   site.innerHTML=shell(`<div class="mobile-top">${top}</div><form class="search-row" id="search-form" role="search"><div class="search-box">${icon('search')}<input class="control" name="q" type="search" aria-label="Buscar por palavra-chave" placeholder="Buscar por palavra-chave" value="${e(params.get('q')||'')}"></div>${btn('filters','','filter','filter-square','aria-label="Filtros"')}</form>
     <div class="quick-grid">${link('/novo/found','<span class="quick-icon">'+icon('plus')+'</span><span><b>Encontrei um item</b><small>Registrar achado</small></span>',{cls:'quick-card red-card'})}
     ${link('/novo/lost','<span class="quick-icon">'+icon('search')+'</span><span><b>Perdi um item</b><small>Abrir solicitação</small></span>',{cls:'quick-card dark-card'})}</div>
     <div class="chips">${chips}</div><div class="section-head"><h3>Itens encontrados recentemente</h3>${link('/','Ver todos',{cls:'link'})}</div>
-    <div class="item-list" id="homeItems">${rows||'<div class="empty">Nenhum item encontrado com esses filtros.</div>'}</div>${pager(path,data)}`);
+    <div class="item-list" id="homeItems">${rows||'<div class="empty">Nenhum item encontrado com esses filtros.</div>'}</div>${pager(path,data)}`,{home:true});
   const search=qs('#search-form input');
   let delay;
   const run=()=>{clearTimeout(delay);go(withQuery(path,'q',search.value.trim()),{keepScroll:true});};
@@ -304,9 +308,9 @@ async function detail(itemId, token) {
   else contact=`<div class="contact-head"><div><h3>${item.reservedForMe?'Contato em andamento':'Entrar em contato'}</h3><span>Ao abrir o WhatsApp, sua solicitação fica registrada.</span></div></div>
     <div class="contact-owner"><div class="avatar">${e(initial(item.contactName))}</div><div><b>${e(item.contactName)}</b><span>${item.custody==='campus'?'Setor responsável pela guarda':'Pessoa que encontrou o item'}</span></div></div>${whatsappButton}<p id="contact-error" role="alert"></p>`;
   site.innerHTML=shell(`<div class="detail-hero"><button class="hero-open" data-action="gallery" data-index="0" aria-label="Ampliar foto">${cover(item)}</button><div class="detail-actions">${link('/',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}${btn('share','','share','icon-btn','aria-label="Compartilhar"')}</div></div>
-    <div class="row between">${badge(item.status)}<span class="detail-code">Código #${e(item.id.slice(0,8).toUpperCase())}</span></div><h1 class="detail-title">${e(item.title)}</h1><p class="detail-description">${e(item.description)}</p>
+    <div class="detail-content"><div class="row between">${badge(item.status)}<span class="detail-code">Código #${e(item.id.slice(0,8).toUpperCase())}</span></div><h1 class="detail-title">${e(item.title)}</h1><p class="detail-description">${e(item.description)}</p>
     <div class="detail-info">${info('box','Categoria',item.category)}${info('pin','Local onde foi encontrado',item.location)}${info('calendar','Data do encontro',niceDate(item.occurredOn))}</div>
-    <div class="current-location">${icon('box')}<div><b>Onde o item está agora</b><br>${active?e(custodyText[item.custody]):'Item já devolvido ao proprietário'}${active && item.custody==='campus' && session.sector.location?' · '+e(session.sector.location):''}</div></div><section class="contact-box">${contact}</section>`,{detail:true});
+    <div class="current-location">${icon('box')}<div><b>Onde o item está agora</b><br>${active?e(custodyText[item.custody]):'Item já devolvido ao proprietário'}${active && item.custody==='campus' && session.sector.location?' · '+e(session.sector.location):''}</div></div><section class="contact-box">${contact}</section></div>`,{detail:true});
   actions.gallery=button=>showGallery(item,Number(button.dataset.index));
   actions['direct-handover']=()=>returnDialog(item);
   actions['start-whatsapp']=async button=>{
