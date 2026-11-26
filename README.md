@@ -52,7 +52,7 @@ O Worker serve as telas de `public/`, a API de `src/`, os registros no D1 e as f
 
 ### Cloudflare Workers Builds
 
-Ao conectar o GitHub ao Worker existente, configure `npm test` como comando de build e `npm run deploy -- --workers-build` como comando de publicação. Defina `NODE_VERSION` com Node.js 24 e `CLOUDFLARE_D1_DATABASE_ID` com o identificador do D1 já provisionado. O comando aplica as migrações pendentes no D1 antes de publicar o Worker e precisa de permissão de edição nesse banco. O comando de publicação do Workers Builds usa os vínculos existentes e informa o SHA do commit no endpoint `/api/health`.
+Ao conectar o GitHub ao Worker existente, configure `npm test` como comando de build e `npm run deploy -- --workers-build` como comando de publicação. Defina `NODE_VERSION` com Node.js 24 e `CLOUDFLARE_D1_DATABASE_ID` com o identificador do D1 já provisionado. Na publicação contínua, o script verifica a regra de devolução no D1 e atualiza essa regra se encontrar a versão antiga. O comando de publicação do Workers Builds usa os vínculos existentes e informa o SHA do commit no endpoint `/api/health`.
 
 ### Integrações
 

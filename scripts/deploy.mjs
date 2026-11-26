@@ -120,7 +120,15 @@ async function deploy() {
   await writeFile(join(root,destination),JSON.stringify(source,null,2) + '\n');
   wrangler(['deploy','--dry-run',...production]);
   if (check) return;
-  wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
+  if (workersBuild) {
+    const checkTrigger = "SELECT count(*) AS legacy FROM sqlite_schema WHERE name='returns_validate' AND instr(sql, 'l.category_id = f.category_id') > 0";
+    const result = JSON.parse(wrangler(['d1','execute',db.database_name,'--remote',...production,'--command',checkTrigger,'--json'],{capture:true}));
+    if (result[0].results[0].legacy) {
+      wrangler(['d1','execute',db.database_name,'--remote',...production,'--file','migrations/0003_return_linked_loss.sql']);
+    }
+  } else {
+    wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
+  }
   wrangler(['deploy',...production]);
   await verifyPublication(source.vars.APP_ORIGIN,source.vars.APP_RELEASE);
 }
