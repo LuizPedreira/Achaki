@@ -382,3 +382,45 @@ body { font-family: Inter, system-ui, sans-serif; }
 .reservation-dialog .reservation-choices .primary { background: #98273d; border-color: #98273d; color: #fff; }
 .reservation-dialog .reservation-choices .secondary { color: #273c51; border: 1px solid #c5ced6; background: #fff; }
 .reservation-dialog .reservation-later { margin: 4px auto 0; width: 100%; background: transparent; border: 0; color: #526476; }
+
+/* Ações de cada objeto no painel */
+.admin-app .item-register .table-item b { color: #23384a; }
+.admin-app .item-register .table-actions {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  align-items: center;
+  gap: 6px;
+}
+.admin-app .item-register .table-actions > .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: auto;
+  height: auto;
+  min-height: 36px;
+  padding: 6px 9px;
+  white-space: nowrap;
+  border-radius: 6px;
+  line-height: 1.25;
+}
+.admin-app .item-register .table-actions > .button:only-child { grid-column: 1 / -1; justify-self: start; }
+.admin-app .item-register .table-actions .icon { flex: none; width: 15px; height: 15px; }
+.admin-app .item-register .table-actions .quiet { color: #31465a; background: white; border: 1px solid #cbd4dc; }
+.admin-app .item-register .table-actions .quiet:hover { background: #edf2f5; border-color: #98a9b7; }
+.admin-app .item-register .table-actions .danger { color: #93283d; }
+.admin-app .item-register .mobile-col-label { display: none; }
+@media (max-width: 700px) {
+  .admin-app .item-register table { min-width: 0; border-collapse: separate; border-spacing: 0; }
+  .admin-app .item-register thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .admin-app .item-register tbody { display: block; }
+  .admin-app .item-register tr { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; padding: 15px; }
+  .admin-app .item-register tr + tr { border-top: 1px solid #d9dfe5; }
+  .admin-app .item-register tbody td { display: block; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; }
+  .admin-app .item-register td:nth-child(n+3) { grid-column: 1 / -1; }
+  .admin-app .item-register .table-item { min-width: 0; }
+  .admin-app .item-register .table-item > span:last-child { min-width: 0; }
+  .admin-app .item-register .mobile-col-label { display: block; font-size: 12px; font-weight: 600; color: #536474; }
+  .admin-app .item-register .table-actions { display: flex; flex-wrap: wrap; margin-top: 3px; gap: 6px; }
+  .admin-app .item-register .table-actions > .button { min-height: 44px; }
+}

@@ -1178,8 +1178,8 @@ async function itemManagement(url,token) {
     return `<tr><td><a href="${itemHref(item.id)}" class="table-item" data-nav><span class="table-cover">${cover(item)}</span><span><b>${e(item.title)}</b>
       <small>${e(item.category)} · ${e(item.authorName)}</small></span></a></td>
       <td>${badge(item.status)}${item.kind === 'found' && item.publication !== 'public' ? badge(item.publication,publicationText[item.publication]) : ''}</td>
-      <td><span>${niceDate(item.returnedOn || item.occurredOn)}</span><small>${e(item.location || kindText[item.kind])}</small></td>
-      <td>${e(item.recipientName || item.reservationName || custodyText[item.custody] || '—')}</td>
+      <td><span class="mobile-col-label" aria-hidden="true">Data e local</span><span>${niceDate(item.returnedOn || item.occurredOn)}</span><small>${e(item.location || kindText[item.kind])}</small></td>
+      <td><span class="mobile-col-label" aria-hidden="true">Responsável ou destinatário</span>${e(item.recipientName || item.reservationName || custodyText[item.custody] || '—')}</td>
       <td><div class="table-actions">${controls.join('')}</div></td></tr>`;
   };
   let exportQuery = new URLSearchParams();
@@ -1198,7 +1198,7 @@ async function itemManagement(url,token) {
       ${select('Status','status',statuses,params.get('status') || '')}
       ${historyMode ? input('De','from',params.get('from'),`type="date" max="${today()}"`) + input('Até','to',params.get('to'),`type="date" max="${today()}"`) : ''}
       <div class="table-filter-end">${submit('Filtrar','filter')}</div><div class="form-error" role="alert"></div></form>
-    ${data.items.length ? `<div class="table-wrap panel" role="region" aria-label="Registros de objetos" tabindex="0"><table><thead><tr><th scope="col">Objeto</th><th scope="col">Status</th>
+    ${data.items.length ? `<div class="table-wrap panel item-register" role="region" aria-label="Registros de objetos" tabindex="0"><table><thead><tr><th scope="col">Objeto</th><th scope="col">Status</th>
       <th scope="col">Data e local</th><th scope="col">Responsável ou destinatário</th><th scope="col">Ações</th></tr></thead>
       <tbody>${data.items.map(row).join('')}</tbody></table></div>${pager(path + url.search,data)}` :
       empty('Nenhum registro','Os itens que correspondem a esta seção ou filtro aparecem aqui.','','search')}`,path);
