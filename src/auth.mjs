@@ -14,8 +14,8 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const DAY = 86_400;
 
 export function validPassword(value) {
-  if (typeof value !== 'string' || value.length < 10 || value.length > 128 || value.trim().length < 10) {
-    throw new HttpError(400, 'Use uma senha com 10 a 128 caracteres.');
+  if (typeof value !== 'string' || value.length < 8 || value.length > 128 || value.trim().length < 8) {
+    throw new HttpError(400, 'Use uma senha com 8 a 128 caracteres.');
   }
   return value;
 }
@@ -283,6 +283,7 @@ export async function finishMicrosoft(env, request, url, user) {
 }
 
 export async function bootstrapAdmin(env, request, user) {
+  if (env.CAMPUS_ADMIN_EMAIL) throw new HttpError(404, 'Recurso não encontrado.');
   const secret = env.ADMIN_BOOTSTRAP_TOKEN;
   const provided = request.headers.get('Authorization') || '';
   if (!secret || secret.length < 32 || provided.length > 1024) throw new HttpError(404, 'Recurso não encontrado.');

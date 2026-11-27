@@ -182,7 +182,7 @@ export async function itemDetails(env, user, itemId) {
 
 export async function prepareItem(env, input, kind, original = null) {
   const title = plain(input.title, 'o título', 3, 90);
-  const description = plain(input.description, 'a descrição', 8, 1200);
+  const description = plain(input.description, 'a descrição', 0, 1200);
   const category = await first(env, 'SELECT id,name FROM categories WHERE id = ? AND (active = 1 OR id = ?)',
     plain(input.categoryId, 'a categoria', 1, 90), original?.category_id || '');
   if (!category) throw new HttpError(400, 'Selecione uma categoria disponível.');
@@ -191,7 +191,7 @@ export async function prepareItem(env, input, kind, original = null) {
   const custody = kind === 'found' ? choice(input.custody, ['finder','campus'], 'quem está com o item') : null;
   const searchText = `${normalize([title, description, category.name].join(' '))}\x1f${normalize(location)}`;
   const fingerprint = await digest([category.id, occurred, normalize(title), normalize(description), normalize(location)].join('\x1f'));
-  return { title, description, category, location, occurred, custody, searchText, fingerprint, sharePhone: input.sharePhone === true ? 1 : 0 };
+  return { title, description, category, location, occurred, custody, searchText, fingerprint, sharePhone: original ? original.share_phone : Number(kind === 'lost') };
 }
 
 export function itemValues(item) {

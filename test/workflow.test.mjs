@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import worker from '../src/worker.mjs';
 import { createLocalEnv } from '../scripts/local-env.mjs';
-import { redirect, today } from '../src/http.mjs';
+import { digest, redirect, today } from '../src/http.mjs';
 import { lossFormPath, safePath } from '../public/navigation.js';
 
 const origin = 'http://127.0.0.1:8787';
@@ -172,13 +172,13 @@ test('edição e arquivo do autor preservam revisão, privacidade e histórico',
   assert.deepEqual((await Promise.all(accounts)).map(([status]) => status),[201,201]);
   assert.equal((await staff('/api/bootstrap/admin',{},{ headers:{ Authorization:'Bearer ' + local.bootstrapToken } }))[0],200);
   const upload = (await finder('/api/media',photo,{ binary:true }))[1].id;
-  const [created, { item }] = await finder('/api/items',object('Carregador preto',{ photos:[upload] }));
+  const [created, { item }] = await finder('/api/items',object('Carregador preto',{ photos:[upload],description:'' }));
   assert.equal(created,201);
   assert.equal((await visitor('/api/items/' + item.id))[0],200);
   assert.equal((await staff('/api/admin/settings',{ review:true,location:'Secretaria' },{ method:'PATCH' }))[0],200);
   const path = '/api/mine/' + item.id;
   const patch = { method:'PATCH' };
-  const updatedItem = { ...item,title:'Carregador USB-C preto',location:'Saguão principal' };
+  const updatedItem = { ...item,title:'Carregador USB-C preto',description:'USB-C',location:'Saguão principal' };
   assert.equal((await visitor(path,updatedItem,patch))[0],401);
   assert.equal((await staff(path,updatedItem,patch))[0],404);
   assert.equal((await finder(path,item,patch))[1].publication,'public');
@@ -215,9 +215,13 @@ test('edição e arquivo do autor preservam revisão, privacidade e histórico',
   assert.equal((await finder('/api/mine?kind=found&archived=1'))[1].total,0);
   assert.equal((await finder(path + '/archive',{ action:'restore',updatedAt:administrativelyArchived.items[0].updatedAt }))[0],404);
 
-  const [recorded, { item:loss }] = await finder('/api/items',object('Chaves da sala',{ kind:'lost',categoryId:'acessorios' }));
+  const [recorded, { item:loss }] = await finder('/api/items',object('Chaves da sala',{ kind:'lost',categoryId:'acessorios',location:'No banco entre os blocos B e C',description:undefined }));
   assert.equal(recorded,201);
-  assert.equal((await finder('/api/mine/' + loss.id,{ ...loss,title:'Chaves com fita vermelha',sharePhone:true },patch))[0],200);
+  assert.equal(loss.description,'');
+  assert.equal(loss.location,'No banco entre os blocos B e C');
+  const privateLoss=(await staff('/api/admin/items?kind=lost'))[1].items.find(entry=>entry.id===loss.id);
+  assert.ok(privateLoss.contactPhone);
+  assert.equal((await finder('/api/mine/' + loss.id,{ ...loss,title:'Chaves com fita vermelha' },patch))[0],200);
   const corrected = (await finder('/api/mine?kind=lost'))[1].items[0];
   assert.equal(corrected.sharePhone,true);
   assert.equal(corrected.publication,'private');
@@ -697,4 +701,28 @@ test('Meu item foi encontrado permite selecionar outra categoria e um achado ant
   assert.equal(record.status,'recovered');
   assert.equal(record.recoveredItemId,found.id);
   assert.equal(record.recipientRating,5);
+});
+
+test('painel exclusivo e senha de oito caracteres', async t => {
+  const local = app();
+  t.after(local.close);
+  const member = local.client(), admin = local.client(), guest = local.client();
+  const email = 'lrpj@gmail.com';
+  local.env.CAMPUS_ADMIN_EMAIL = email;
+  const old = await member('/api/auth/register',account('Usuário anterior','outro@example.test'));
+  local.sqlite.prepare("UPDATE users SET role='admin' WHERE id=?").run(old[1].user.id);
+  const setup = await readFile(new URL('../scripts/configure-campus-admin.sql',import.meta.url),'utf8');
+  local.sqlite.exec(setup);
+  assert.equal((await member('/api/admin/overview'))[0],401);
+  assert.equal((await member('/api/auth/login',{email:'outro@example.test',password}))[1].user.role,'user');
+  assert.equal((await member('/api/admin/overview'))[0],403);
+  assert.equal((await guest('/api/admin/overview'))[0],401);
+  assert.throws(()=>local.sqlite.prepare("UPDATE users SET role='admin' WHERE id=?").run(old[1].user.id));
+  const token = crypto.randomUUID().replaceAll('-','')+'12345678901';
+  local.sqlite.prepare("INSERT INTO password_resets(token_hash,user_id,expires_at) SELECT ?,id,unixepoch()+600 FROM users WHERE email=?").run(await digest(token),email);
+  assert.equal((await admin('/api/auth/reset',{token,password:'1234567'}))[0],400);
+  assert.equal((await admin('/api/auth/reset',{token,password:'12345678'}))[0],200);
+  assert.equal((await admin('/api/auth/reset',{token,password:'12345678'}))[0],400);
+  assert.equal((await admin('/api/auth/login',{email,password:'12345678'}))[1].user.role,'admin');
+  assert.equal((await admin('/api/admin/overview'))[0],200);
 });

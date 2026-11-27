@@ -100,7 +100,7 @@ function shell(content,{auth=false,home=false,detail=false}={}) {
   if (home) {
     const person=session.user;
     const account=person
-      ? link(person.role==='admin'?'/painel':contactsPage,e(person.name.split(' ')[0]),{
+      ? link(person.role==='admin'?'/painel':contactsPage,person.role==='admin'?'Painel administrativo':e(person.name.split(' ')[0]),{
           cls:'campus-account',symbol:person.role==='admin'?'dashboard':'bell',
           attrs:person.role==='admin'?'aria-label="Abrir painel administrativo"':'aria-label="Abrir minhas solicitações"'})
       : link('/entrar','Entrar',{cls:'campus-account',symbol:'user'});
@@ -360,7 +360,7 @@ function authNext(url) {
   return safePath(url.searchParams.get('next'),'');
 }
 
-actions['show-terms']=()=>modal('Uso e privacidade','<p>Use dados verdadeiros e publique apenas fotos do objeto. Os achados ficam no mural público. As perdas são acessíveis à sua conta e ao setor. Quando alguém inicia o contato sobre um achado, o WhatsApp das pessoas envolvidas é usado para combinar a devolução.</p>');
+actions['show-terms']=()=>modal('Uso e privacidade','<p>Use dados verdadeiros e publique apenas fotos do objeto. Os achados ficam no mural público. Os novos registros de perda incluem seu WhatsApp para contato pelo setor. Só você e o setor podem consultar a perda. Quando alguém inicia o contato sobre um achado, o WhatsApp das pessoas envolvidas é usado para combinar a devolução.</p>');
 function authPage(path, url) {
   const next = authNext(url);
   const target = next ? `?next=${encodeURIComponent(next)}` : '';
@@ -368,7 +368,7 @@ function authPage(path, url) {
     '/entrar': ['Login','Entre para registrar itens encontrados ou procurar algo que você perdeu no campus.','Entrar'],
     '/cadastro': ['Criar conta','Preencha seus dados para acessar o sistema de achados e perdidos da Fatec.','Criar conta'],
     '/recuperar-senha': ['Recuperar senha','Informe o e-mail da conta para receber um link de redefinição.','Enviar link'],
-    '/redefinir-senha': ['Escolher nova senha','Use uma senha com pelo menos 10 caracteres.','Salvar nova senha']
+    '/redefinir-senha': ['Escolher nova senha','Use uma senha com pelo menos 8 caracteres.','Salvar nova senha']
   };
   const [title, description, verb] = authTypes[path];
   const login = path === '/entrar';
@@ -387,8 +387,8 @@ function authPage(path, url) {
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
       ${!reset ? input('E-mail','email','','type="email" required maxlength="254" autocomplete="username" placeholder="voce@exemplo.com"') : ''}
       ${register ? input('Telefone / WhatsApp','phone','','type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
-      ${!forgot ? passwordField('Senha','password','auth-password',login?'current-password':'new-password',login?0:10,login?'':'Use pelo menos 10 caracteres.') : ''}
-      ${register||reset ? passwordField('Confirmar senha','confirm','auth-confirm','new-password',10) : ''}
+      ${!forgot ? passwordField('Senha','password','auth-password',login?'current-password':'new-password',login?0:8,login?'':'Use pelo menos 8 caracteres.') : ''}
+      ${register||reset ? passwordField('Confirmar senha','confirm','auth-confirm','new-password',8) : ''}
       ${login ? `<div class="auth-options"><label class="check"><input type="checkbox" name="remember">Lembrar de mim</label>
         ${link('/recuperar-senha','Esqueci a senha',{ cls:'text-link' })}</div>` : ''}
       ${register?`<label class="check"><input name="terms" type="checkbox" required><span>Li e aceito as ${btn('show-terms','orientações de uso','','link-button')} e as informações sobre privacidade.</span></label>`:''}
@@ -443,7 +443,7 @@ async function detail(itemId, token) {
   const thumbnails=photos.length>1?`<div class="detail-thumbs" role="group" aria-label="Fotos do objeto">${photos.map((src,i)=>`<button type="button" data-action="gallery" data-index="${i}" aria-label="Ampliar foto ${i+1} de ${photos.length}"><img src="${e(src)}" alt="" decoding="async"></button>`).join('')}</div>`:'';
   site.innerHTML=shell(`<div class="sheet-tools">${link(catalogReturn,'Voltar ao mural',{cls:'sheet-back',symbol:'back',attrs:'data-catalog-return'})}${btn('share','Compartilhar','share','sheet-share')}</div>
     <div class="detail-media"><div class="detail-hero">${gallery}</div>${thumbnails}</div>
-    <div class="detail-content"><div class="row between">${badge(item.status)}<span class="detail-code">Código #${e(item.id.slice(0,8).toUpperCase())}</span></div><h1 class="detail-title">${e(item.title)}</h1><p class="detail-description">${e(item.description)}</p>
+    <div class="detail-content"><div class="row between">${badge(item.status)}<span class="detail-code">Código #${e(item.id.slice(0,8).toUpperCase())}</span></div><h1 class="detail-title">${e(item.title)}</h1>${item.description?`<p class="detail-description">${e(item.description)}</p>`:''}
     <div class="detail-info">${info('box','Categoria',item.category)}${info('pin','Local onde foi encontrado',item.location)}${info('calendar','Data do encontro',niceDate(item.occurredOn))}</div>
     <div class="current-location">${icon('box')}<div><b>Onde o item está agora</b><br>${active?e(custodyText[item.custody]):'Item já devolvido ao proprietário'}${active && item.custody==='campus' && session.sector.location?' · '+e(session.sector.location):''}</div></div><section class="contact-box">${contact}</section></div>`,{detail:true});
   actions.gallery=button=>showGallery(item,Number(button.dataset.index));
@@ -467,7 +467,7 @@ async function ownLossPage(item, token) {
   const photos = item.photos.map((src,index) => `<button class="thumb" type="button" data-action="gallery" data-index="${index}" aria-label="Ampliar foto ${index + 1}"><img src="${e(src)}" alt=""></button>`).join('');
   site.innerHTML = shell(`<div class="loss-page"><div class="back-row">${link('/meus-registros?aba=perdi','Minhas perdas',{ cls:'text-link',symbol:'back' })}</div>
     <header class="loss-heading"><div class="record-tags">${item.archivedAt ? badge('archived','Arquivado') : badge(item.status,open ? 'Em busca' : 'Recuperado')}<span class="private-label">${icon('lock')} Perda privada</span></div>
-      <h1>${e(item.title)}</h1><p class="description">${e(item.description)}</p>
+      <h1>${e(item.title)}</h1>${item.description?`<p class="description">${e(item.description)}</p>`:''}
       <div class="inline-meta">${rowInfo('tag',item.category)}${item.location ? rowInfo('pin',item.location) : ''}${rowInfo('calendar',niceDate(item.occurredOn))}</div>
       ${photos ? `<div class="thumbnails">${photos}</div>` : ''}</header>
     ${item.contactCount ? link(contactPath(item),'Ver solicitação',{cls:'mini-action primary'}) : ''}
@@ -515,11 +515,11 @@ function newChoice() {
 function itemFields(kind, data = {}, categories = session.categories, lockCategory = false) {
   const found = kind === 'found';
   return `${input('Nome do objeto','title',data.title,'required minlength="3" maxlength="90" placeholder="Ex.: Estojo azul"')}
-    ${textarea('Descrição','description',data.description,'required minlength="8" maxlength="1200" rows="4" placeholder="Descreva as características visíveis do objeto."')}
+    ${textarea('Descrição (opcional)','description',data.description,'maxlength="1200" rows="4"')}
     <div class="form-grid">${select('Categoria','categoryId',[['','Selecione'],...categories.map(c => [c.id,c.name])],data.categoryId,lockCategory ? 'disabled' : 'required')}
     ${input(found ? 'Data em que encontrou' : 'Data aproximada da perda','occurredOn',data.occurredOn || today(),`type="date" max="${today()}" required`)}</div>
-    ${input(found ? 'Local onde encontrou' : 'Local da perda (opcional)','location',data.location,`list="item-locations" maxlength="120" ${found ? 'required minlength="2"' : ''} placeholder="Ex.: Biblioteca"`)}
-    <datalist id="item-locations">${locationOptions()}</datalist>`;
+    ${input(found ? 'Local onde encontrou' : 'Local da perda (opcional)','location',data.location,`${found ? 'list="item-locations"' : ''} maxlength="120" ${found ? 'required minlength="2"' : ''} placeholder="Ex.: Biblioteca"`)}
+    ${found ? `<datalist id="item-locations">${locationOptions()}</datalist>` : ''}`;
 }
 
 function draftKey(kind) {
@@ -549,22 +549,20 @@ function itemForm(kind, url) {
   const pointOptions = [['','Selecione'],...session.locations.map(l=>[l.name,l.name])];
   if(draft.location && !pointOptions.some(([value])=>value===draft.location)) pointOptions.push([draft.location,draft.location]);
   site.innerHTML=shell(`<div class="auth-titlebar">${link('/',icon('back'),{cls:'icon-btn',attrs:'aria-label="Voltar"'})}<h2>Registrar item ${found?'encontrado':'perdido'}</h2><span></span></div>
-    <form class="original-item-form" id="item-form">${found?'':'<div class="notice">Descreva o item com o máximo de detalhes. Você também pode adicionar fotos de referência para facilitar a identificação.</div>'}
+    <form class="original-item-form" id="item-form">
     <div class="upload-zone"><div class="upload-title"><div><b>${found?'Fotos do item':'Fotos de referência (opcional)'}</b><div class="tiny muted">${found?'Adicione de 1 a 3 fotos. A primeira será a capa.':'Até 3 fotos do item perdido.'}</div></div><span id="photo-total" class="tiny muted"></span></div>
     <div class="photo-grid" id="photo-previews"></div><div class="photo-actions">
-      ${btn('photo-file','<span><b>Escolher foto</b><small>Galeria ou arquivos</small></span>','camera','photo-action-btn')}
-      ${btn('photo-capture','<span><b>Usar câmera</b><small>Em celulares compatíveis</small></span>','camera','photo-action-btn')}
+      ${btn('photo-file','Escolher foto','camera','photo-action-btn')}
+      ${btn('photo-capture','Usar câmera','camera','photo-action-btn')}
       <input type="file" id="photo-files" accept="image/*" multiple hidden><input type="file" id="photo-camera" accept="image/*" capture="environment" hidden></div>
       <div class="photo-message" id="photo-status" role="status">Até 20 MB por foto.</div>
       <div class="field-error" id="photo-error" role="alert"></div></div>
     ${input(found?'Título do item':'O que você perdeu?','title',draft.title,'class="control" required minlength="3" maxlength="90"')}
-    ${textarea('Descrição','description',draft.description,'class="control" required minlength="8" maxlength="1200"')}
+    ${textarea('Descrição (opcional)','description',draft.description,'class="control" maxlength="1200" rows="3"')}
     <div class="grid2">${select('Categoria','categoryId',categoryOptions(),draft.categoryId,'class="control" required')}
     ${input(found?'Data do encontro':'Data aproximada','occurredOn',draft.occurredOn||today(),`class="control" type="date" required max="${today()}"`)}</div>
-    ${select(found?'Local onde foi encontrado':'Onde acha que perdeu? (opcional)','location',pointOptions,draft.location,found?'class="control" required':'class="control"')}
-    ${found?`<fieldset class="field"><legend>Onde o item está agora?</legend><div class="choice-grid"><label class="choice-card"><input type="radio" name="custody" value="finder" ${checked(draft.custody==='finder')}><b>Está comigo</b><span>Quem perdeu poderá combinar a retirada com você.</span></label><label class="choice-card"><input type="radio" name="custody" value="campus" ${checked(draft.custody!=='finder')}><b>Entreguei na Fatec</b><span>O item está no setor de Achados e Perdidos.</span></label></div></fieldset>`:`<label class="record-card row between"><span><b>Compartilhar meu contato</b><small>Permite que a equipe fale com você.</small></span><input type="checkbox" name="sharePhone" ${checked(draft.sharePhone==='on')}></label>`}
-    <small class="draft-note">${icon('check')} Os campos ficam salvos nesta aba. Se recarregar a página, escolha as fotos novamente.</small>
-    ${found?'<div class="notice green">Ao publicar, o item aparece imediatamente na busca.</div>':''}
+    ${found ? select('Local onde foi encontrado','location',pointOptions,draft.location,'class="control" required') : input('Onde você acha que perdeu? (opcional)','location',draft.location,'class="control" maxlength="120" placeholder="Ex.: corredor entre a biblioteca e a cantina"')}
+    ${found?`<fieldset class="field"><legend>Onde o item está agora?</legend><div class="choice-grid"><label class="choice-card"><input type="radio" name="custody" value="finder" ${checked(draft.custody==='finder')}><b>Está comigo</b><span>Quem perdeu poderá combinar a retirada com você.</span></label><label class="choice-card"><input type="radio" name="custody" value="campus" ${checked(draft.custody!=='finder')}><b>Entreguei na Fatec</b><span>O item está no setor de Achados e Perdidos.</span></label></div></fieldset>`:''}
     <div class="form-error" role="alert"></div>${submit(found?'Publicar registro':'Registrar solicitação')}</form>`);
   drawPhotos();
   const form = qs('#item-form');
@@ -600,7 +598,7 @@ function itemForm(kind, url) {
       }
       formDraft.status = 'Salvando o registro…';
       if (formDraft===photoDraft) drawPhotos();
-      response = await api('/items',{ method:'POST',body:{ ...data,kind,photos:ids,sharePhone:data.sharePhone === 'on' } });
+      response = await api('/items',{ method:'POST',body:{ ...data,kind,photos:ids } });
     } catch (error) {
       if (error.message.includes('foto expirou')) for (const photo of photos) photo.id = null;
       throw error;
@@ -727,15 +725,12 @@ function contactPath(item) {
 function editRecord(item, own = false) {
   const categories = session.categories.some(cat => cat.id === item.categoryId)
     ? session.categories : [...session.categories,{ id:item.categoryId,name:item.category }];
-  const changePhoneConsent = own && item.kind === 'lost';
   modal('Editar registro',`<form class="stack" id="edit-record-form">
     ${itemFields(item.kind,item,categories,Boolean(item.recoveryForId))}
-    ${changePhoneConsent ? `<label class="check"><input type="checkbox" name="sharePhone" ${checked(item.sharePhone)}>Compartilhar meu WhatsApp com o setor para tratar desta perda</label>` : ''}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Salvar alterações','check')}</div></form>`);
   onForm('#edit-record-form',async data => {
     const { publication } = await api(`/${own ? 'mine' : 'admin/items'}/${item.id}`,{ method:'PATCH',body:{
-      ...data, categoryId:data.categoryId || item.categoryId, updatedAt:item.updatedAt,
-      sharePhone:changePhoneConsent ? data.sharePhone === 'on' : item.sharePhone
+      ...data, categoryId:data.categoryId || item.categoryId, updatedAt:item.updatedAt
     } });
     notify(own && publication === 'pending' ? 'Alterações salvas. O objeto está em revisão.' : 'Registro atualizado.');
     go(location.pathname + location.search,{ keepScroll:true });
@@ -1007,8 +1002,8 @@ function firstAdmin() {
 actions['change-password'] = () => {
   modal('Alterar senha', `<form class="stack" id="password-form">
     ${passwordField('Senha atual','currentPassword','profile-current','current-password')}
-    ${passwordField('Nova senha','password','profile-password','new-password',10,'Use pelo menos 10 caracteres.')}
-    ${passwordField('Confirmar nova senha','confirm','profile-confirm','new-password',10)}
+    ${passwordField('Nova senha','password','profile-password','new-password',8,'Use pelo menos 8 caracteres.')}
+    ${passwordField('Confirmar nova senha','confirm','profile-confirm','new-password',8)}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Alterar senha','check')}</div></form>`);
   qs('#password-form').addEventListener('input',event=>{
     if (['password','confirm'].includes(event.target.name)) clearConfirmationError(event.currentTarget);
@@ -1229,11 +1224,10 @@ async function usersPage(url,token) {
   actions['edit-user'] = button => {
     const user = data.items.find(x => x.id === button.dataset.id);
     modal('Gerenciar conta',`<p>${e(user.name)}</p><form class="stack" id="user-form">
-      ${select('Perfil','role',[['user','Usuário'],['admin','Administrador']],user.role)}
       <label class="check"><input type="checkbox" name="active" ${checked(user.active)}>Conta ativa</label>
       <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Salvar','check')}</div></form>`);
     onForm('#user-form',async data => {
-      await api(`/admin/users/${user.id}`,{ method:'PATCH',body:{ role:data.role,active:data.active === 'on' } });
+      await api(`/admin/users/${user.id}`,{ method:'PATCH',body:{ active:data.active === 'on' } });
       notify('Conta atualizada.');
       go(location.pathname + location.search,{ keepScroll:true });
     });

@@ -115,6 +115,7 @@ async function deploy() {
     if (!/^[0-9a-f]{32}$/i.test(process.env.CLOUDFLARE_ACCOUNT_ID)) throw new Error('CLOUDFLARE_ACCOUNT_ID inválido.');
     source.account_id = process.env.CLOUDFLARE_ACCOUNT_ID;
   }
+  source.vars.CAMPUS_ADMIN_EMAIL = 'lrpj@gmail.com';
   const commit = process.env.WORKERS_CI_COMMIT_SHA || '';
   source.vars.APP_RELEASE = workersBuild && /^[0-9a-f]{40}$/i.test(commit) ? commit : randomUUID();
   await writeFile(join(root,destination),JSON.stringify(source,null,2) + '\n');
@@ -126,8 +127,18 @@ async function deploy() {
     if (result[0].results[0].legacy) {
       wrangler(['d1','execute',db.database_name,'--remote',...production,'--file','migrations/0003_return_linked_loss.sql']);
     }
+    const checkDescription = "SELECT instr(sql,'BETWEEN 8 AND 1200') AS required FROM sqlite_schema WHERE type='table' AND name='items'";
+    const description = JSON.parse(wrangler(['d1','execute',db.database_name,'--remote',...production,'--command',checkDescription,'--json'],{capture:true}));
+    if (description[0].results[0].required) {
+      wrangler(['d1','execute',db.database_name,'--remote',...production,'--file','migrations/0004_optional_description.sql']);
+    }
   } else {
     wrangler(['d1','migrations','apply',db.database_name,'--remote',...production]);
+  }
+  const checkAdmin = "SELECT count(*) AS configured FROM sqlite_schema WHERE type='trigger' AND name='campus_admin_update'";
+  const adminState = JSON.parse(wrangler(['d1','execute',db.database_name,'--remote',...production,'--command',checkAdmin,'--json'],{capture:true}));
+  if (!adminState[0].results[0].configured) {
+    wrangler(['d1','execute',db.database_name,'--remote',...production,'--file','scripts/configure-campus-admin.sql']);
   }
   wrangler(['deploy',...production]);
   await verifyPublication(source.vars.APP_ORIGIN,source.vars.APP_RELEASE);

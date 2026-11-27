@@ -128,6 +128,7 @@ export async function editUser(env, user, targetId, input) {
   if (user.id === targetId) throw new HttpError(400, 'Peça a outro administrador para alterar sua conta.');
   const target = await first(env, 'SELECT id,role,active FROM users WHERE id = ?', targetId);
   if (!target) throw new HttpError(404, 'Usuário não encontrado.');
+  if (env.CAMPUS_ADMIN_EMAIL && input.role && input.role !== target.role) throw new HttpError(403, 'O perfil administrativo é exclusivo da conta do campus.');
   const role = ['user','admin'].includes(input.role) ? input.role : target.role;
   const active = typeof input.active === 'boolean' ? Number(input.active) : target.active;
   if (role === target.role && active === target.active) return json({});

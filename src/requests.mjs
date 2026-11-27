@@ -27,8 +27,8 @@ export async function requestContact(env, user, itemId, input) {
   if (!lostId) {
     lostId = crypto.randomUUID();
     changes.push(db(env, `INSERT INTO items(id,kind,author_id,title,description,category_id,location,occurred_on,
-        publication,search_text,fingerprint,recovery_for_id,updated_by)
-      SELECT ?,'lost',?,title,?,category_id,location,occurred_on,'private',search_text,?,id,? FROM items
+        share_phone,publication,search_text,fingerprint,recovery_for_id,updated_by)
+      SELECT ?,'lost',?,title,?,category_id,location,occurred_on,1,'private',search_text,?,id,? FROM items
       WHERE id = ? AND publication = 'public' AND status IN ('open','reserved') AND archived_at IS NULL
       AND NOT EXISTS (SELECT 1 FROM contacts WHERE item_id = items.id AND requester_id = ? AND status IN ('pending','approved'))`,
       lostId, user.id, 'Solicitação de recuperação criada ao pedir contato.', await digest(`recovery:${item.id}:${lostId}`), user.id, item.id, user.id));
@@ -92,8 +92,8 @@ export async function whatsapp(env,user,itemId,input) {
     const args = [item.id,version,user.id];
     if (!lostId) {
       lostId=crypto.randomUUID();
-      batch.push(db(env,`INSERT INTO items(id,kind,author_id,title,description,category_id,location,occurred_on,publication,search_text,fingerprint,recovery_for_id,updated_by)
-        SELECT ?,'lost',?,title,'Recuperação iniciada pelo WhatsApp.',category_id,location,occurred_on,'private',search_text,?,id,? FROM items WHERE id=? AND ${guard}`,
+      batch.push(db(env,`INSERT INTO items(id,kind,author_id,title,description,category_id,location,occurred_on,share_phone,publication,search_text,fingerprint,recovery_for_id,updated_by)
+        SELECT ?,'lost',?,title,'Recuperação iniciada pelo WhatsApp.',category_id,location,occurred_on,1,'private',search_text,?,id,? FROM items WHERE id=? AND ${guard}`,
         lostId,user.id,await digest('whatsapp:'+lostId),user.id,item.id,...args));
     }
     if (!previous) batch.push(db(env,`INSERT INTO contacts(id,item_id,requester_id,lost_id,message)
