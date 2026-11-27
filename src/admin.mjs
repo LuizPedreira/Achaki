@@ -1,4 +1,4 @@
-import { HttpError, all, date, db, first, id, json, normalize, phone, plain, run } from './http.mjs';
+import { HttpError, all, date, db, first, id, json, digest, now, randomToken, normalize, phone, plain, run } from './http.mjs';
 import { loadItem, nextUpdate } from './items.mjs';
 
 export async function dashboard(env) {
@@ -115,12 +115,26 @@ export async function users(env, search) {
   const params = [q, q];
   const where = "WHERE instr(lower(name),?) > 0 OR instr(lower(email),?) > 0";
   const [rows, count] = await env.DB.batch([
-    db(env, `SELECT id,name,role,active,created_at AS createdAt,
+    db(env, `SELECT id,name,role,active,(password_hash IS NULL AND role='admin') AS needsActivation,created_at AS createdAt,
       CASE WHEN email LIKE '%@identity.invalid' THEN '' ELSE email END AS email FROM users ${where} ORDER BY created_at DESC LIMIT 20 OFFSET ?`,
       ...params, (page - 1) * 20),
     db(env, `SELECT count(*) AS total FROM users ${where}`, ...params)
   ]);
   return json({ items: rows.results, total: count.results[0].total, page, perPage: 20 });
+}
+
+export async function staffActivation(env,user,targetId) {
+  if (user.email !== env.CAMPUS_ADMIN_EMAIL) throw new HttpError(403,'Apenas o administrador principal pode gerar o convite.');
+  const target = id(targetId);
+  const token = randomToken();
+  const hash = await digest(token);
+  const canActivate = "EXISTS (SELECT 1 FROM users WHERE id=? AND email='jessica@gmail.com' AND role='admin' AND active=1 AND password_hash IS NULL)";
+  const [,created] = await env.DB.batch([
+    db(env,`DELETE FROM password_resets WHERE user_id=? AND ${canActivate}`,target,target),
+    db(env,`INSERT INTO password_resets(token_hash,user_id,expires_at) SELECT ?,?,? WHERE ${canActivate}`,hash,target,now()+1800,target)
+  ]);
+  if (!created.meta.changes) throw new HttpError(409,'Esta conta não está aguardando ativação.');
+  return json({token});
 }
 
 export async function editUser(env, user, targetId, input) {

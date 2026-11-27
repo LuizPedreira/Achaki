@@ -140,6 +140,14 @@ async function deploy() {
   if (!adminState[0].results[0].configured) {
     wrangler(['d1','execute',db.database_name,'--remote',...production,'--file','scripts/configure-campus-admin.sql']);
   }
+  const staffCheck = "SELECT count(*) AS ready FROM sqlite_schema WHERE name='campus_admin_update' AND instr(sql,'jessica@gmail.com')>0";
+  const staffState = JSON.parse(wrangler(['d1','execute',db.database_name,'--remote',...production,'--command',staffCheck,'--json'],{capture:true}));
+  if (!staffState[0].results[0].ready) {
+    wrangler(['d1','execute',db.database_name,'--remote',...production,'--file','scripts/configure-campus-staff.sql']);
+  }
+  const verifyStaff = "SELECT count(*) AS total FROM users WHERE role='admin' AND email IN ('lrpj@gmail.com','jessica@gmail.com')";
+  const staff = JSON.parse(wrangler(['d1','execute',db.database_name,'--remote',...production,'--command',verifyStaff,'--json'],{capture:true}));
+  if (staff[0].results[0].total !== 2) throw new Error('Falha ao configurar as duas contas administrativas.');
   wrangler(['deploy',...production]);
   await verifyPublication(source.vars.APP_ORIGIN,source.vars.APP_RELEASE);
 }

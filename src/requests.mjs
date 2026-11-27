@@ -117,6 +117,18 @@ const awaitingPickup = `c.status = 'approved' AND ${liveContact} AND c.requester
 const handover = `${eligiblePickup} AND c.requester_id <> ? AND
   ((i.custody = 'finder' AND i.author_id = ?) OR (i.custody = 'campus' AND ? = 'admin'))`;
 
+export async function pendingReservation(env,user) {
+  requireUser(user);
+  const reservation = await first(env,`SELECT c.id, i.title, u.name AS requesterName
+    FROM items i JOIN contacts c ON c.id = i.reserved_contact_id AND c.item_id = i.id
+    JOIN users u ON u.id = c.requester_id
+    WHERE i.kind = 'found' AND i.status = 'reserved' AND i.archived_at IS NULL
+      AND c.status = 'pending' AND c.requester_id <> ?
+      AND ((i.custody = 'finder' AND i.author_id = ?) OR (i.custody = 'campus' AND ? = 'admin'))
+    ORDER BY c.created_at, c.id LIMIT 1`,user.id,user.id,user.role);
+  return json({reservation:reservation || null});
+}
+
 export async function contactSummary(env, user) {
   requireUser(user);
   const joined = 'FROM contacts c JOIN items i ON i.id = c.item_id';
@@ -196,6 +208,9 @@ export async function reviewContact(env, user, contactId, input) {
   if (!item || item.archived_at || item.status === 'returned') throw new HttpError(409, 'O item já foi encerrado.');
   const action = choice(input.action, ['approve','reject','cancel'], 'uma ação');
   if (action === 'cancel' ? contact.requester_id !== user.id : contact.requester_id === user.id || !manages(item,user)) throw new HttpError(403, 'Você não tem acesso a esta solicitação.');
+  if (input.reservationPrompt === true && (contact.status !== 'pending' || item.status !== 'reserved' || item.reserved_contact_id !== contact.id)) {
+    throw new HttpError(409, 'Esta reserva já foi atualizada.');
+  }
   const time = nextUpdate(item);
   const version = item.updated_at;
   const reviewer = "EXISTS (SELECT 1 FROM users a WHERE a.id = ? AND a.active = 1 AND ((i.custody = 'campus' AND a.role = 'admin') OR (i.custody = 'finder' AND i.author_id = a.id)))";

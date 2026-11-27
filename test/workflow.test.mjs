@@ -642,12 +642,26 @@ test('WhatsApp do responsável reserva uma vez, mesmo com dois interessados, e p
   const inbox = (await finder('/api/contacts'))[1];
   assert.equal(inbox.total,1);
   assert.equal(inbox.contacts[0].whatsappReservation,true);
+  const prompt = '/api/contacts/pending-reservation';
+  assert.equal((await visitor(prompt))[0],401);
+  assert.deepEqual((await finder(prompt))[1].reservation,{id:contact.contactId,title:'Fone azul',requesterName:'Pessoa Silva'});
+  for (const client of [winner,loser]) assert.equal((await client(prompt))[1].reservation,null);
   assert.equal(inbox.contacts[0].phone,'5516999999999');
   assert.equal((await winner('/api/contacts/'+contact.contactId,{action:'cancel'},{method:'PATCH'}))[0],200);
   assert.equal((await winner(path))[1].item.status,'open');
   const reopened=(await winner(path+'/whatsapp',{}))[1];
   assert.equal(reopened.lostId,contact.lostId);
   assert.notEqual(reopened.contactId,contact.contactId);
+  const respond = (id,action) => finder('/api/contacts/'+id,{action,reservationPrompt:true},{method:'PATCH'});
+  assert.equal((await respond(contact.contactId,'reject'))[0],409);
+  assert.equal((await respond(reopened.contactId,'reject'))[0],200);
+  assert.equal((await finder(prompt))[1].reservation,null);
+  assert.equal((await winner(path))[1].item.status,'open');
+  const third = (await winner(path+'/whatsapp',{}))[1];
+  assert.equal((await respond(third.contactId,'approve'))[0],200);
+  assert.equal((await finder(prompt))[1].reservation,null);
+  assert.equal((await respond(third.contactId,'reject'))[0],409);
+  assert.equal((await winner(path))[1].item.status,'reserved');
   assert.equal((await finder(path+'/return',{returnedOn:today()}))[0],201);
   assert.equal((await winner('/api/mine?kind=lost'))[1].items[0].status,'recovered');
   assert.equal((await winner(path+'/whatsapp',{}))[0],409);
@@ -675,6 +689,10 @@ test('WhatsApp do setor exige número configurado e respeita a reserva administr
   const [status,contact]=await owner(path+'/whatsapp',{lostId:lost.id});
   assert.equal(status,200,JSON.stringify(contact));
   assert.equal(contact.lostId,lost.id);
+  const prompt = '/api/contacts/pending-reservation';
+  assert.equal((await finder(prompt))[1].reservation,null);
+  assert.equal((await owner(prompt))[1].reservation,null);
+  assert.deepEqual((await staff(prompt))[1].reservation,{id:contact.contactId,title:'Fone da biblioteca',requesterName:'Lucas Martins'});
   assert.equal(new URL(contact.url).pathname,'/5516988883333');
   assert.equal((await staff(path+'/return',{returnedOn:today()}))[0],201);
 });
@@ -725,6 +743,31 @@ test('painel exclusivo e senha de oito caracteres', async t => {
   assert.equal((await admin('/api/auth/reset',{token,password:'12345678'}))[0],400);
   assert.equal((await admin('/api/auth/login',{email,password:'12345678'}))[1].user.role,'admin');
   assert.equal((await admin('/api/admin/overview'))[0],200);
+
+  const futureAdmin = local.client();
+  const jessica = 'jessica@gmail.com';
+  const oldJessica = await futureAdmin('/api/auth/register',account('Jéssica',jessica));
+  const staffSetup = await readFile(new URL('../scripts/configure-campus-staff.sql',import.meta.url),'utf8');
+  local.sqlite.exec(staffSetup);
+  const target = oldJessica[1].user.id;
+  const activation = '/api/admin/users/'+target+'/activation';
+  assert.equal((await futureAdmin('/api/admin/overview'))[0],401);
+  assert.equal((await futureAdmin('/api/auth/login',{email:jessica,password}))[0],401);
+  assert.equal((await admin('/api/admin/overview'))[0],200);
+  assert.equal((await member(activation,{}))[0],403);
+  const [invited,invite] = await admin(activation,{});
+  assert.equal(invited,200);
+  const activeInvite = (await admin(activation,{}))[1];
+  assert.equal((await futureAdmin('/api/auth/reset',{token:invite.token,password:'Campus98'}))[0],400);
+  assert.equal((await futureAdmin('/api/auth/reset',{token:activeInvite.token,password:'Campus98'}))[0],200);
+  local.sqlite.exec(staffSetup);
+  assert.equal((await futureAdmin('/api/auth/login',{email:jessica,password:'Campus98'}))[1].user.role,'admin');
+  assert.equal((await futureAdmin('/api/admin/overview'))[0],200);
+  assert.equal((await futureAdmin(activation,{}))[0],403);
+  assert.equal((await admin(activation,{}))[0],409);
+  assert.equal((await member('/api/admin/overview'))[0],403);
+  assert.throws(()=>local.sqlite.prepare("UPDATE users SET role='admin' WHERE id=?").run(old[1].user.id));
+
 });
 
 test('conta comum aceita oito caracteres no cadastro e no login', async t => {

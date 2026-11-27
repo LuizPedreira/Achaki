@@ -131,6 +131,52 @@ dialog.addEventListener('close', () => { if (previousFocus?.isConnected) previou
 dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
 actions.close = () => dialog.close();
 
+let reservationCheckedFor = null;
+
+async function checkReservation(token) {
+  const userId = session.user?.id;
+  if (!userId) { reservationCheckedFor = null; return; }
+  if (reservationCheckedFor === userId || dialog.open) return;
+  let reservation;
+  try {
+    ({reservation} = await api('/contacts/pending-reservation'));
+  } catch { return; }
+  if (navigation !== token || session.user?.id !== userId || dialog.open) return;
+  reservationCheckedFor = userId;
+  if (!reservation) return;
+  modal('O item é dessa pessoa?',`
+    <div class="reservation-person"><span class="reservation-avatar" aria-hidden="true">${e(initial(reservation.requesterName))}</span>
+      <p><strong>${e(reservation.requesterName)}</strong> solicitou contato sobre este item.</p></div>
+    <div class="reservation-item">${icon('tag')}<strong>${e(reservation.title)}</strong></div>
+    <p class="reservation-hint">Confirme depois de conversar. A entrega é registrada à parte.</p>
+    <div class="reservation-choices"><button type="button" class="button primary" data-review="approve">Sim, é dessa pessoa</button>
+    <button type="button" class="button secondary" data-review="reject">Não, liberar o item</button></div>
+    <div class="form-error" role="alert"></div>
+    ${btn('close','Responder depois','','reservation-later')}`,'reservation-dialog');
+  const buttons = dialog.querySelectorAll('[data-review]');
+  for (const button of buttons) button.addEventListener('click',async () => {
+    for (const choice of buttons) choice.disabled = true;
+    try {
+      const action = button.dataset.review;
+      await api('/contacts/'+reservation.id,{method:'PATCH',body:{action,reservationPrompt:true}});
+      notify(action === 'approve' ? 'Identificação confirmada. A reserva continua até a entrega.' : 'Reserva liberada. O item está em aberto.');
+    } catch (error) {
+      if (error.status !== 409) {
+        if (button.isConnected) {
+          dialog.querySelector('.form-error').textContent = error.message;
+          for (const choice of buttons) choice.disabled = false;
+        }
+        return;
+      }
+      notify(error.message);
+    }
+    if (session.user?.id !== userId) return;
+    reservationCheckedFor = null;
+    if (button.isConnected && dialog.open) dialog.close();
+    if (token === navigation) await render();
+  });
+}
+
 function confirmAction(title, body, work, label = 'Confirmar') {
   modal(title, `<p>${e(body)}</p><form class="stack" id="confirm-form"><div class="form-error" role="alert"></div>
     <div class="form-actions">${btn('close','Voltar')}${submit(label)}</div></form>`);
@@ -1219,9 +1265,23 @@ async function usersPage(url,token) {
     <tbody>${data.items.map(user => `<tr><td><div class="table-item"><span class="avatar">${e(initial(user.name))}</span>
       <span><b>${e(user.name)}</b><small>${e(user.email || 'Acesso institucional')}</small></span></div></td><td>${user.role === 'admin' ? 'Administrador' : 'Usuário'}</td>
       <td>${user.active ? badge('open','Ativa') : badge('hidden','Inativa')}</td><td>${niceDate(user.createdAt)}</td>
-      <td>${user.id === session.user.id ? '<small>Sua conta</small>' : btn('edit-user','Gerenciar','edit','quiet',`data-id="${user.id}"`)}</td></tr>`).join('')}</tbody></table></div>
+      <td>${user.needsActivation && user.active && user.email === 'jessica@gmail.com' && session.user.email === 'lrpj@gmail.com' ? btn('staff-invite','Gerar convite','user','quiet',`data-id="${user.id}"`) : ''}${user.id === session.user.id ? '<small>Sua conta</small>' : btn('edit-user','Gerenciar','edit','quiet',`data-id="${user.id}"`)}</td></tr>`).join('')}</tbody></table></div>
       ${pager(url.pathname + url.search,data)}` : empty('Nenhuma conta encontrada','Tente outro nome ou e-mail.','','users')}`,url.pathname);
   onForm('#users-filter',({ q }) => go(withQuery(url.pathname + url.search,'q',q.trim()),{ keepScroll:true }));
+  actions['staff-invite'] = async button => {
+    const {token} = await api('/admin/users/'+button.dataset.id+'/activation',{method:'POST',body:{}});
+    const invite = new URL('/redefinir-senha',location.origin);
+    invite.hash = token;
+    modal('Primeiro acesso da Jéssica',`<p>Envie o link em particular para a Jéssica definir a senha. Ele vale por 30 minutos e pode ser usado uma vez.</p>
+      ${input('Link de ativação','invite',invite.href,'readonly id="staff-invite-link"')}
+      <div class="form-actions">${btn('copy-staff-invite','Copiar link','','primary')}</div>`);
+  };
+  actions['copy-staff-invite'] = async () => {
+    const field = qs('#staff-invite-link');
+    field.select();
+    try { await navigator.clipboard.writeText(field.value); notify('Link copiado.'); }
+    catch { notify('Link selecionado para copiar.'); }
+  };
   actions['edit-user'] = button => {
     const user = data.items.find(x => x.id === button.dataset.id);
     modal('Gerenciar conta',`<p>${e(user.name)}</p><form class="stack" id="user-form">
@@ -1304,6 +1364,8 @@ async function render() {
     }
     site.innerHTML = shell(empty(error.status === 404 ? 'Registro não encontrado' : 'Não foi possível carregar a página',
       error.message, error.status === 404 ? link('/','Voltar à busca') : btn('retry','Tentar novamente','history','primary'),'search'));
+  } finally {
+    if (token === navigation) void checkReservation(token);
   }
 }
 
