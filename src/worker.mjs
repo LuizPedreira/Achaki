@@ -61,7 +61,7 @@ const routes = [
 ];
 
 const htmlRoute = /^\/(?:(?:item|comprovante)\/[a-f0-9-]{36}|novo(?:\/(?:found|lost))?|meus-registros|entrar|cadastro|recuperar-senha|redefinir-senha|configurar-admin|perfil|ajuda|painel(?:\/(?:encontrados|perdidos|solicitacoes|historico|usuarios|configuracoes))?)?\/?$/i;
-const assetRoute = /^\/(?:app\.js|icons\.js|navigation\.js|styles\.css|original\.css|interface\.css|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
+const assetRoute = /^\/(?:app\.js|icons\.js|navigation\.js|styles\.css|original\.css|interface\.css|mural\.css|images\/chaves-do-mural\.webp|favicon\.png|manifest\.webmanifest|sw\.js|icons\/icon-(?:192|512)\.png|fonts\/inter\.woff2|vendor\/qr-creator\.js)$/;
 
 async function handle(request, env, context) {
   const url = new URL(request.url);

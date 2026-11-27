@@ -16,7 +16,7 @@ const mimeTypes = {
   '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8',
   '.js':'text/javascript; charset=utf-8', '.json':'application/json',
   '.webmanifest':'application/manifest+json', '.png':'image/png',
-  '.jpg':'image/jpeg', '.woff2':'font/woff2', '.txt':'text/plain; charset=utf-8'
+  '.jpg':'image/jpeg', '.webp':'image/webp', '.woff2':'font/woff2', '.txt':'text/plain; charset=utf-8'
 };
 
 function query(sqlite, queryText, parameters = []) {

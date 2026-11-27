@@ -95,8 +95,22 @@ function shell(content,{auth=false,home=false,detail=false}={}) {
   const path=location.pathname;
   const nav=(href,name,symbol,main=false)=>link(href,(main?`<span class="nav-main">${icon(symbol)}</span>`:icon(symbol))+`<span>${name}</span>`,
     {cls:'nav-item'+(path===href?' active':''),attrs:path===href?'aria-current="page"':''});
-  const dock=`<nav class="bottom-nav" aria-label="Navegação principal"><div class="rail-brand"><span class="rail-mark">${icon('box')}</span><div><strong>Achados &amp; Perdidos</strong>${session.campus?`<small>${e(session.campus)}</small>`:''}</div></div>${nav('/','Início','home')}${nav('/novo/lost','Perdi algo','search')}${nav('/novo/found','Registrar','plus',true)}${nav('/meus-registros','Registros','list')}${nav('/perfil','Perfil','user')}</nav>`;
-  return `<div class="mobile-shell ${auth?'auth-shell':detail?'item-shell':'workspace-shell'}">${auth||detail?'':dock}<main id="conteudo" tabindex="-1" class="mobile-page${home?' home-view':''}${auth?' white no-nav':detail?' detail-page no-nav':''}">${content}</main></div>`;
+  const destinations=nav('/','Início','home')+nav('/novo/lost','Perdi algo','search')+
+    nav('/novo/found','Registrar','plus',true)+nav('/meus-registros','Registros','list')+nav('/perfil','Perfil','user');
+  if (home) {
+    const person=session.user;
+    const account=person
+      ? link(person.role==='admin'?'/painel':contactsPage,e(person.name.split(' ')[0]),{
+          cls:'campus-account',symbol:person.role==='admin'?'dashboard':'bell',
+          attrs:person.role==='admin'?'aria-label="Abrir painel administrativo"':'aria-label="Abrir minhas solicitações"'})
+      : link('/entrar','Entrar',{cls:'campus-account',symbol:'user'});
+    return `<div class="campus-app"><header class="campus-header"><div class="campus-header-inner">
+      <div class="campus-brand"><span class="campus-mark">${icon('tag')}</span><div><strong>Achados &amp; Perdidos</strong>${session.campus?`<small>${e(session.campus)}</small>`:''}</div></div>
+      <nav class="campus-menu" aria-label="Navegação principal">${destinations}</nav>${account}
+      </div></header><main id="conteudo" tabindex="-1" class="campus-main">${content}</main></div>`;
+  }
+  const dock=`<nav class="bottom-nav" aria-label="Navegação principal"><div class="rail-brand"><span class="rail-mark">${icon('box')}</span><div><strong>Achados &amp; Perdidos</strong>${session.campus?`<small>${e(session.campus)}</small>`:''}</div></div>${destinations}</nav>`;
+  return `<div class="mobile-shell ${auth?'auth-shell':detail?'item-shell':'workspace-shell'}">${auth||detail?'':dock}<main id="conteudo" tabindex="-1" class="mobile-page${auth?' white no-nav':detail?' detail-page no-nav':''}">${content}</main></div>`;
 }
 
 function header(title, description, actions = '', kicker = '') {
@@ -206,8 +220,8 @@ function pager(path, data) {
 }
 
 const illustrations = { eletronicos:'phone', documentos:'list', acessorios:'tag', 'material-escolar':'edit', roupas:'archive', outros:'box' };
-function cover(item) {
-  return item.photos?.[0] ? `<img src="${e(item.photos[0])}" alt="" loading="lazy" decoding="async">`
+function cover(item, loading = 'lazy') {
+  return item.photos?.[0] ? `<img src="${e(item.photos[0])}" alt="" loading="${loading}" decoding="async">`
     : `<span class="card-art ${e(item.categoryId)}">${icon(illustrations[item.categoryId] || 'box')}</span>`;
 }
 
@@ -231,20 +245,17 @@ async function home(url,token) {
   const data=await api('/items?'+params);
   if(token!==navigation)return;
   const path=url.pathname+url.search,category=url.searchParams.get('category')||'';
-  const person=session.user;
-  const account=person
-    ? link(person.role==='admin'?'/painel':contactsPage, e(person.name.split(' ')[0]), {cls:'mural-account',symbol:person.role==='admin'?'dashboard':'bell',attrs:'aria-label="Abrir solicitações ou painel"'})
-    : link('/entrar','Entrar',{cls:'mural-account',symbol:'user'});
-  const chips=[{id:'',name:'Todos'},...session.categories].map(c=>link(withQuery(path,'category',c.id),e(c.name),{cls:'chip'+(category===c.id?' active':''),attrs:category===c.id?'aria-current="true"':''})).join('');
-  const rows=data.items.map(item=>link(itemHref(item.id),`
-    <span class="object-image">${cover(item)}</span>
-    <span class="object-body">
-      <span class="object-labels"><span class="object-category">${e(item.category)}</span>${badge(item.status)}</span>
-      <strong class="object-title">${e(item.title)}</strong>
-      ${item.description?`<span class="object-description">${e(item.description)}</span>`:''}
-      <span class="object-facts">${rowInfo('pin',item.location)}${rowInfo('calendar',niceDate(item.occurredOn))}</span>
-      <span class="object-open">Ver detalhes ${icon('arrow')}</span>
-    </span>`,{cls:'item-card object-card'})).join('');
+  const chips=[{id:'',name:'Todos'},...session.categories].map(c=>link(withQuery(path,'category',c.id),e(c.name),{
+    cls:'chip catalog-option',attrs:category===c.id?'aria-current="true"':''})).join('');
+  const rows=data.items.map((item,index)=>{
+    const record=`<span class="catalog-thumb">${cover(item,index===0?'eager':'lazy')}</span>
+      <span class="catalog-identity"><span class="catalog-kind">${e(item.category)}</span>
+        <strong class="catalog-title">${e(item.title)}</strong>
+        ${item.description?`<span class="catalog-description">${e(item.description)}</span>`:''}</span>
+      <span class="catalog-facts">${rowInfo('pin',item.location)}${rowInfo('calendar',niceDate(item.occurredOn))}</span>
+      <span class="catalog-end">${badge(item.status)}<span class="catalog-open">Ver detalhes</span></span>`;
+    return `<li>${link(itemHref(item.id),record,{cls:'catalog-record',attrs:'data-catalog-item'})}</li>`;
+  }).join('');
   const filterLabels=[
     ['status',statusText[params.get('status')]],['location',params.get('location')],
     ['from',params.get('from')?'Desde '+niceDate(params.get('from')):''],
@@ -266,27 +277,40 @@ async function home(url,token) {
     else if(item.right>bounds.right) list.scrollLeft+=item.right-bounds.right+4;
   };
   const count=data.total===1?'1 item':data.total+' itens';
-  const results=`<nav class="chips catalog-categories" aria-label="Categorias">${chips}</nav>
-    ${activeFilters?`<div class="applied-filters">${activeFilters}</div>`:''}
-    <div class="section-head"><div><h2>${heading}</h2><span class="result-count" role="status">${count}</span></div>${filtered?link('/','Limpar busca',{cls:'link'}):''}</div>
-    <div class="object-grid" id="homeItems">${rows||empty(filtered?'Nenhum item encontrado':'Ainda não há itens no mural',filtered?'Tente outro termo ou remova um filtro.':'Os itens publicados aparecerão aqui.','','search')}</div>${pager(path,data)}`;
+  const filterButton=btn('filters',`Filtros${filterCount?` <span class="filter-total">${filterCount}</span>`:''}`,'filter','catalog-filter',
+    `aria-label="${e(filterLabel)}" data-active="${filterCount>0}"`);
+  const results=`<div class="catalog-heading"><div><h2 id="results-heading">${heading}</h2><span class="catalog-count" role="status">${count}</span></div>${filterButton}</div>
+    <nav class="catalog-categories" aria-label="Categorias">${chips}</nav>
+    ${filtered?`<div class="catalog-applied">${activeFilters}${link('/','Limpar busca',{cls:'catalog-clear'})}</div>`:''}
+    ${rows?`<ul class="catalog-records" id="homeItems" role="list">${rows}</ul>`:
+      empty(filtered?'Nenhum item encontrado':'Ainda não há itens no mural',filtered?'Tente outro termo ou remova um filtro.':'Os itens publicados aparecerão aqui.','','search')}
+    ${pager(path,data)}`;
   if(previousResults) {
+    const focused=document.activeElement;
+    const focusTarget=focused?.matches('.catalog-option')?'.catalog-option[aria-current]':
+      focused?.matches('.catalog-filter')?'.catalog-filter':'';
     previousResults.innerHTML=results;
     previousResults.removeAttribute('aria-busy');
-    const filterButton=qs('#search-form [data-action=filters]');
-    if(filterButton){
-      filterButton.dataset.active=String(filterCount>0);
-      filterButton.setAttribute('aria-label',filterLabel);
-    }
     syncCategories();
+    if(focusTarget) previousResults.querySelector(focusTarget)?.focus({preventScroll:true});
     const field=qs('#search-form input');
     if(field.value.trim()!==(params.get('q')||'')) field.value=params.get('q')||'';
     return;
   }
-  site.innerHTML=shell(`<header class="mural-heading"><div><div class="campus-label">${e(session.campus)}</div><h1>Mural de achados</h1></div>${account}</header>
-    <div class="mural-tools"><form class="search-row" id="search-form" role="search"><div class="search-box">${icon('search')}<input class="control" name="q" type="search" aria-label="Buscar por palavra-chave" placeholder="Buscar objeto" value="${e(params.get('q')||'')}"></div>${btn('filters','Filtros','filter','filter-square',`data-active="${filterCount>0}" aria-label="${e(filterLabel)}"`)}</form>
-      <div class="mural-actions">${link('/novo/found','Encontrei um item',{cls:'report-action found',symbol:'plus'})}${link('/novo/lost','Perdi um item',{cls:'report-action',symbol:'search'})}</div></div>
-    <section id="catalog-results" aria-label="Objetos encontrados">${results}</section>`,{home:true});
+  const report=(href,label,detail,symbol,cls)=>link(href,`<span class="report-symbol">${icon(symbol)}</span>
+    <span class="report-copy"><strong>${label}</strong><small>${detail}</small></span>`,{cls:'campus-report '+cls});
+  site.innerHTML=shell(`<div class="campus-intro">
+    <section class="mural-banner" aria-labelledby="mural-title">
+      <img class="banner-keys" src="/images/chaves-do-mural.webp" width="1200" height="800" alt="" fetchpriority="high">
+      <div class="banner-copy"><h1 id="mural-title">Mural de achados</h1><p>Consulte os objetos encontrados no campus.</p></div>
+      <form class="campus-search" id="search-form" role="search">${icon('search')}
+        <input type="search" name="q" aria-label="Buscar por nome, cor ou local" placeholder="Nome, cor ou local" maxlength="120" enterkeyhint="search" value="${e(params.get('q')||'')}">
+        <button type="submit">Buscar</button></form>
+    </section>
+    <section class="campus-register" aria-labelledby="register-heading"><h2 id="register-heading">Registrar um item</h2>
+      <div class="report-options">${report('/novo/found','Encontrei um item','Publicar no mural','plus','report-found')}
+      ${report('/novo/lost','Perdi um item','Solicitação privada','search','report-lost')}</div></section></div>
+    <section id="catalog-results" class="campus-catalog" aria-labelledby="results-heading">${results}</section>`,{home:true});
   syncCategories();
   const search=qs('#search-form input');
   const run=()=>{
@@ -1306,7 +1330,7 @@ document.addEventListener('click', async event => {
       history.back();
       return;
     }
-    if(location.pathname==='/' && pageLink.classList.contains('item-card')) {
+    if(location.pathname==='/' && pageLink.hasAttribute('data-catalog-item')) {
       history.replaceState({...history.state,catalogScroll:window.scrollY},'',location.href);
       go(pageLink.pathname+pageLink.search,{entryState:{catalogOrigin:location.pathname+location.search}});
       return;
@@ -1344,7 +1368,7 @@ window.addEventListener('beforeinstallprompt',event => {
   document.querySelectorAll('.install-link').forEach(element => { element.hidden = false; });
 });
 
-site.innerHTML = shell(`<div class="loading" role="status">Carregando…</div>`);
+site.innerHTML = shell(`<div class="loading" role="status">Carregando…</div>`,{home:location.pathname==='/'});
 try { await refreshSession(); await render(); }
 catch (error) {
   site.innerHTML = shell(empty('Sistema indisponível',error.message,btn('retry','Tentar novamente','history','primary'),'search'));

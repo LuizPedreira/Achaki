@@ -289,6 +289,13 @@ test('arquivos públicos, páginas por URL e classificação opcional', async t 
   const [assets, css] = await client('/styles.css',undefined,{ raw:true });
   assert.equal(assets,200);
   assert.match(await css.text(),/\.mural-search/);
+  const [catalogCode,catalogStyles] = await client('/mural.css',undefined,{ raw:true });
+  assert.equal(catalogCode,200);
+  assert.match(catalogStyles.headers.get('Content-Type'),/text\/css/);
+  const [imageCode,headerPhoto] = await client('/images/chaves-do-mural.webp',undefined,{ raw:true });
+  assert.equal(imageCode,200);
+  assert.equal(headerPhoto.headers.get('Content-Type'),'image/webp');
+  assert.equal(Buffer.from(await headerPhoto.arrayBuffer()).toString('ascii',8,12),'WEBP');
   const [scriptCode,script] = await client('/app.js',undefined,{ raw:true });
   assert.equal(scriptCode,200);
   for (const [,source] of (await script.text()).matchAll(/^import .*? from '\.\/(.+?)';/gm)) {
