@@ -726,3 +726,28 @@ test('painel exclusivo e senha de oito caracteres', async t => {
   assert.equal((await admin('/api/auth/login',{email,password:'12345678'}))[1].user.role,'admin');
   assert.equal((await admin('/api/admin/overview'))[0],200);
 });
+
+test('conta comum aceita oito caracteres no cadastro e no login', async t => {
+  const local = app();
+  t.after(local.close);
+  const visitor = local.client();
+  const registration = account('Visitante do Campus', 'visitante@example.test');
+  const credential = 'campus28';
+  const [invalid, error] = await visitor('/api/auth/register', {
+    ...registration, password: credential.slice(0, 7)
+  });
+  assert.equal(invalid, 400);
+  assert.match(error.error, /8/);
+  const [created, result] = await visitor('/api/auth/register', {
+    ...registration, password: credential
+  });
+  assert.equal(created, 201);
+  assert.equal(result.user.role, 'user');
+  const fresh = local.client();
+  const [loggedIn, session] = await fresh('/api/auth/login', {
+    email: registration.email, password: credential
+  });
+  assert.equal(loggedIn, 200);
+  assert.equal(session.user.id, result.user.id);
+  assert.equal((await fresh('/api/admin/overview'))[0], 403);
+});

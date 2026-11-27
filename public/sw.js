@@ -1,5 +1,5 @@
-const CACHE = 'achados-shell-v14';
-const SHELL = ['/', '/styles.css', '/original.css', '/interface.css', '/mural.css', '/images/chaves-do-mural.webp', '/app.js', '/icons.js', '/navigation.js', '/favicon.png', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/inter.woff2'];
+const CACHE = 'achados-shell-v15';
+const SHELL = ['/', '/styles.css', '/original.css', '/interface.css?v=15', '/mural.css', '/images/chaves-do-mural.webp', '/app.js?v=15', '/password-policy.js', '/icons.js', '/navigation.js', '/favicon.png', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/fonts/inter.woff2'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -13,7 +13,7 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  const key = event.request.mode === 'navigate' && url.pathname === '/' ? '/' : url.pathname;
+  const key = event.request.mode === 'navigate' && url.pathname === '/' ? '/' : url.pathname + url.search;
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || !SHELL.includes(key)) return;
   event.respondWith(fetch(event.request).catch(async () => (await caches.match(key)) || Response.error()));
 });

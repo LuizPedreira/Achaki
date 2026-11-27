@@ -266,3 +266,98 @@ body { font-family: Inter, system-ui, sans-serif; }
 .original-item-form .draft-note { align-items:flex-start; line-height:1.5; }
 
 
+
+/* Painel do campus */
+.admin-app {
+  --campus-red: #a32439;
+  --ink: #182a3b;
+  --muted: #536478;
+  --line: #d9dfe5;
+  --sidebar: 248px;
+  color: var(--ink);
+  background: #f4f6f8;
+  font-family: Inter, system-ui, sans-serif;
+}
+.admin-app .admin-sidebar { background: #192c40; padding: 26px 16px 18px; }
+.admin-app .admin-brand { padding: 0 3px 24px; gap: 10px; margin: 0; border-color: #3c5064; }
+.admin-app .admin-brand b { color: white; font-size: 16px; letter-spacing: -.04em; }
+.admin-app .admin-brand span, .admin-app .admin-profile span { color: #becbd7; }
+.admin-app .admin-menu { gap: 4px; margin-top: 12px; }
+.admin-app .admin-menu a { min-height: 44px; gap: 12px; border-radius: 6px; padding-inline: 13px; color: #dce4ec; }
+.admin-app .admin-menu a:hover { color: white; background: #263d53; }
+.admin-app .admin-menu a.active { color: white; background: #334a61; box-shadow: inset 3px 0 #f18b97; }
+.admin-app .admin-profile { border-color: #3c5064; }
+.admin-app .admin-profile .avatar { background: #364d64; color: white; }
+.admin-app .admin-profile .icon-btn { margin-left: auto; }
+.admin-app .admin-topbar { min-height: 58px; height: auto; padding-block: 6px; }
+.admin-topbar > strong { color: #485a6d; font-size: 14px; font-weight: 600; }
+.admin-mural-link { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 8px; font-size: 14px; font-weight: 650; color: #263e54; text-decoration: none; }
+.admin-mural-link:hover { text-decoration: underline; }
+.admin-app .admin-mobile-logout { display: none; }
+.admin-app .admin-content { max-width: 1420px; margin-inline: auto; padding: clamp(18px,3vw,40px) clamp(16px,3vw,44px) 50px; }
+.admin-main .page-heading { align-items: center; margin: 0 0 20px; }
+.admin-main .page-heading h1 { color: #192d41; font: 680 clamp(26px,3vw,40px)/1.12 Inter,system-ui,sans-serif; letter-spacing: -.045em; }
+.admin-main .page-heading p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+.admin-app .overview-content > .page-heading {
+  min-height: 145px; padding: clamp(22px,3vw,38px); border-radius: 12px; overflow: hidden;
+  background-color: #192c40;
+  background-image: linear-gradient(90deg,#192c40 15%,rgba(25,44,64,.95) 42%,rgba(25,44,64,.68) 78%),url('/images/chaves-do-mural.webp');
+  background-position: center, right 52%; background-size: cover, auto 200%; background-repeat: no-repeat;
+}
+.overview-content > .page-heading h1 { color: white; }
+.admin-app .button.primary { background: #a32439; border-color: #a32439; color: white; }
+.admin-app .button.primary:hover { background: #841e30; }
+.admin-app .overview-content > .page-heading .button { background: white; border-color: white; color: #24384c; min-height: 42px; }
+.admin-app .overview-content > .page-heading .button:hover { background: #f0f3f5; }
+.admin-totals { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: white; }
+.admin-total { display: flex; flex-direction: column; justify-content: space-between; gap: 15px; min-width: 0; padding: clamp(14px,2vw,26px); color: var(--ink); text-decoration: none; }
+.admin-total + .admin-total { border-left: 1px solid var(--line); }
+.admin-total:hover, .admin-total:focus-visible { background: #f6f8fa; }
+.admin-total:focus-visible { outline-offset: -4px !important; }
+.total-caption { display: flex; align-items: flex-start; gap: 8px; color: #485a6c; font-size: 13px; font-weight: 600; line-height: 1.45; }
+.total-caption .icon { flex: 0 0 18px; width: 18px; height: 18px; color: #993348; }
+.admin-total strong { color: #192e42; font-size: clamp(28px,3.2vw,42px); line-height: 1; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
+.admin-app .dashboard-grid { grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); gap: 18px; margin-top: 22px; }
+.admin-app .board { min-width: 0; padding: 0; overflow: hidden; background: white; box-shadow: none; }
+.admin-app .board h2 { margin: 0; padding: 18px 20px; border-bottom: 1px solid var(--line); color: #203447; font: 650 17px/1.35 Inter,system-ui,sans-serif; letter-spacing: -.025em; }
+.admin-app .board .board-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; margin: 0; }
+.admin-app .board-row > div { min-width: 0; overflow-wrap: anywhere; }
+.admin-app .board .record-title { color: #243c51; font-size: 14px; font-weight: 650; }
+.admin-app .board .board-row p, .admin-app .board .hint { color: #556678; font-size: 13px; line-height: 1.5; }
+.admin-app .board > .hint { margin: 0; padding: 22px 20px; }
+.admin-app .board .bar-row { margin: 0; padding: 10px 20px; grid-template-columns: minmax(0,1fr) minmax(35px,.85fr) 3ch; font-size: 13px; }
+.admin-app .bar-row > span { overflow-wrap: anywhere; }
+.admin-app .bar-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-app .bar-row progress { appearance: none; border: 0; height: 6px; background: #e8edf1; border-radius: 6px; overflow: hidden; }
+.admin-app progress::-webkit-progress-bar { background: #e8edf1; }
+.admin-app progress::-webkit-progress-value { background: #5c7285; border-radius: 6px; }
+.admin-app progress::-moz-progress-bar { background: #5c7285; border-radius: 6px; }
+.admin-app .table-wrap { overflow-x: auto; background: white; }
+.admin-app .table-wrap th { background: #edf1f4; color: #46596c; font-weight: 650; }
+.admin-app .table-wrap :is(td,th) { padding: 13px 15px; }
+.admin-app .table-wrap tbody tr:hover { background: #f8fafb; }
+.admin-app .table-filter { padding: 16px; }
+@media(max-width: 1000px) {
+  .admin-totals { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .admin-total:nth-child(3) { border-left: none; }
+  .admin-total:nth-child(n+3) { border-top: 1px solid var(--line); }
+}
+@media(max-width: 850px) {
+  .admin-app { grid-template-columns: minmax(0,1fr); }
+  .admin-app .admin-topbar { padding-inline: 14px; }
+  .admin-app .admin-mobile-logout { display: inline-flex; width: 42px; height: 42px; padding: 0; justify-content: center; }
+  .admin-main .mobile-admin-bar { padding: 0 12px; gap: 4px; background: #fff; }
+  .admin-main .mobile-admin-bar a { min-height: 44px; flex-shrink: 0; font-size: 13px; border-radius: 0; color: #46596b; }
+  .admin-main .mobile-admin-bar a.active { color: #92263a; background: #faf4f5; box-shadow: inset 0 -2px #a32439; }
+  .admin-app .table-filter :is(input,select) { font-size: 16px; }
+}
+@media(max-width: 650px) {
+  .admin-app .dashboard-grid { grid-template-columns: minmax(0,1fr); margin-top: 16px; gap: 16px; }
+  .admin-app .overview-content > .page-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .admin-app .board h2, .admin-app .board .board-row, .admin-app .board .bar-row { padding-inline: 16px; }
+  .admin-app .overview-content > .page-heading .heading-actions { width: auto; }
+}
+@media(max-width: 370px) {
+  .admin-topbar > strong, .admin-mural-link { font-size: 12px; }
+  .admin-top-actions { gap: 2px; }
+}

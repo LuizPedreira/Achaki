@@ -1,3 +1,4 @@
+import { minimumPasswordLength } from '../public/password-policy.js';
 import { timingSafeEqual } from 'node:crypto';
 import {
   HttpError, base64url, clientIP, cookieValue, db, decode, digest, email, encode, first,
@@ -14,8 +15,8 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const DAY = 86_400;
 
 export function validPassword(value) {
-  if (typeof value !== 'string' || value.length < 8 || value.length > 128 || value.trim().length < 8) {
-    throw new HttpError(400, 'Use uma senha com 8 a 128 caracteres.');
+  if (typeof value !== 'string' || value.length < minimumPasswordLength || value.length > 128 || !value.trim()) {
+    throw new HttpError(400, `Use uma senha com ${minimumPasswordLength} a 128 caracteres.`);
   }
   return value;
 }

@@ -1,3 +1,4 @@
+import { minimumPasswordLength } from './password-policy.js';
 import { icon } from './icons.js';
 import { lossFormPath, safePath } from './navigation.js';
 
@@ -368,7 +369,7 @@ function authPage(path, url) {
     '/entrar': ['Login','Entre para registrar itens encontrados ou procurar algo que você perdeu no campus.','Entrar'],
     '/cadastro': ['Criar conta','Preencha seus dados para acessar o sistema de achados e perdidos da Fatec.','Criar conta'],
     '/recuperar-senha': ['Recuperar senha','Informe o e-mail da conta para receber um link de redefinição.','Enviar link'],
-    '/redefinir-senha': ['Escolher nova senha','Use uma senha com pelo menos 8 caracteres.','Salvar nova senha']
+    '/redefinir-senha': ['Escolher nova senha',`Use uma senha com pelo menos ${minimumPasswordLength} caracteres.`,'Salvar nova senha']
   };
   const [title, description, verb] = authTypes[path];
   const login = path === '/entrar';
@@ -386,9 +387,9 @@ function authPage(path, url) {
     ${unavailable ? `<div class="notice">A recuperação automática por e-mail ainda não está disponível. Procure o setor de Achados e Perdidos.</div>${link('/entrar','Voltar para o login')}` :
     `<form class="stack" id="auth-form">${register ? input('Nome completo','name','','required minlength="2" maxlength="90" autocomplete="name"') : ''}
       ${!reset ? input('E-mail','email','','type="email" required maxlength="254" autocomplete="username" placeholder="voce@exemplo.com"') : ''}
-      ${register ? input('Telefone / WhatsApp','phone','','type="tel" required minlength="10" maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
-      ${!forgot ? passwordField('Senha','password','auth-password',login?'current-password':'new-password',login?0:8,login?'':'Use pelo menos 8 caracteres.') : ''}
-      ${register||reset ? passwordField('Confirmar senha','confirm','auth-confirm','new-password',8) : ''}
+      ${register ? input('Telefone / WhatsApp','phone','','type="tel" required maxlength="26" autocomplete="tel" placeholder="(16) 99999-9999"') : ''}
+      ${!forgot ? passwordField('Senha','password','auth-password',login?'current-password':'new-password',login?0:minimumPasswordLength,login?'':`Mínimo de ${minimumPasswordLength} caracteres.`) : ''}
+      ${register||reset ? passwordField('Confirmar senha','confirm','auth-confirm','new-password',minimumPasswordLength) : ''}
       ${login ? `<div class="auth-options"><label class="check"><input type="checkbox" name="remember">Lembrar de mim</label>
         ${link('/recuperar-senha','Esqueci a senha',{ cls:'text-link' })}</div>` : ''}
       ${register?`<label class="check"><input name="terms" type="checkbox" required><span>Li e aceito as ${btn('show-terms','orientações de uso','','link-button')} e as informações sobre privacidade.</span></label>`:''}
@@ -1002,8 +1003,8 @@ function firstAdmin() {
 actions['change-password'] = () => {
   modal('Alterar senha', `<form class="stack" id="password-form">
     ${passwordField('Senha atual','currentPassword','profile-current','current-password')}
-    ${passwordField('Nova senha','password','profile-password','new-password',8,'Use pelo menos 8 caracteres.')}
-    ${passwordField('Confirmar nova senha','confirm','profile-confirm','new-password',8)}
+    ${passwordField('Nova senha','password','profile-password','new-password',minimumPasswordLength,`Mínimo de ${minimumPasswordLength} caracteres.`)}
+    ${passwordField('Confirmar nova senha','confirm','profile-confirm','new-password',minimumPasswordLength)}
     <div class="form-error" role="alert"></div><div class="form-actions">${btn('close','Voltar')}${submit('Alterar senha','check')}</div></form>`);
   qs('#password-form').addEventListener('input',event=>{
     if (['password','confirm'].includes(event.target.name)) clearConfirmationError(event.currentTarget);
@@ -1039,10 +1040,10 @@ const adminNav = [
 ];
 
 function adminShell(content, path) {
-  const menu=adminNav.map(([url,name,symbol])=>link(url,icon(symbol)+' '+e(name),{cls:url===path?'active':''})).join('');
-  return `<div class="admin-app"><aside class="admin-sidebar"><div class="admin-brand"><div class="brand-mark">${icon('box')}</div><div><b>Achados &amp; Perdidos</b><span>Painel administrativo</span></div></div>
-    <nav class="admin-menu">${menu}</nav><div class="admin-spacer"></div><div class="admin-profile"><div class="avatar">${e(initial(session.user.name))}</div><div><b>${e(session.user.name)}</b><span>Administrador</span></div>${btn('logout','','logout','icon-btn','aria-label="Sair"')}</div></aside>
-    <main id="conteudo" class="admin-main" tabindex="-1"><header class="admin-topbar"><h1>${e(adminNav.find(([url])=>url===path)?.[1]||'Solicitações de contato')}</h1>${link('/','Início',{cls:'link'})}</header><nav class="mobile-admin-bar">${menu}</nav><div class="admin-content">${content}</div></main></div>`;
+  const menu=adminNav.map(([url,name,symbol])=>link(url,icon(symbol)+' '+e(name),{cls:url===path?'active':'',attrs:url===path?'aria-current="page"':''})).join('');
+  return `<div class="admin-app"><aside class="admin-sidebar"><div class="admin-brand"><div class="campus-mark">${icon('tag')}</div><div><b>Achados &amp; Perdidos</b><span>${e(session.campus)}</span></div></div>
+    <nav class="admin-menu" aria-label="Seções do painel">${menu}</nav><div class="admin-spacer"></div><div class="admin-profile"><div class="avatar">${e(initial(session.user.name))}</div><div><b>${e(session.user.name)}</b><span>Administrador</span></div>${btn('logout','','logout','icon-btn','aria-label="Sair"')}</div></aside>
+    <main id="conteudo" class="admin-main" tabindex="-1"><header class="admin-topbar"><strong>Painel administrativo</strong><div class="admin-top-actions">${link('/','Voltar ao mural',{cls:'admin-mural-link',symbol:'home'})}${btn('logout','','logout','admin-mobile-logout','aria-label="Sair"')}</div></header><nav class="mobile-admin-bar" aria-label="Seções do painel">${menu}</nav><div class="admin-content${path==='/painel'?' overview-content':''}">${content}</div></main></div>`;
 }
 
 async function adminPage(url, token) {
@@ -1081,10 +1082,10 @@ async function adminOverview(token,path) {
   ];
   const bars = categories.filter(category => category.total);
   const max = Math.max(1,...bars.map(category => category.total));
-  site.innerHTML = adminShell(`${header('Visão geral','Acompanhe os registros e a movimentação do setor.',
+  site.innerHTML = adminShell(`${header('Visão geral','',
     link('/novo/found','Registrar encontrado',{ cls:'button primary',symbol:'plus' }))}
-    <div class="stat-grid">${stats.map(([symbol,num,label,href]) => `<a href="${href}" class="stat panel" data-nav>
-      <span class="choice-icon">${icon(symbol)}</span><strong>${num}</strong><span>${label}</span></a>`).join('')}</div>
+    <div class="admin-totals">${stats.map(([symbol,num,label,href]) => `<a href="${href}" class="admin-total" data-nav>
+      <span class="total-caption">${icon(symbol)}${label}</span><strong>${num}</strong></a>`).join('')}</div>
     <div class="dashboard-grid"><section class="panel board"><h2>Registros recentes</h2>
       ${recent.length ? recent.map(item => `<div class="board-row"><div>${link(itemHref(item.id),e(item.title),{ cls:'record-title' })}
        <p>${kindText[item.kind]} · ${e(item.category)} · ${niceDate(item.createdAt)}</p></div>${badge(item.status)}</div>`).join('')
@@ -1151,7 +1152,7 @@ async function itemManagement(url,token) {
       ${select('Status','status',statuses,params.get('status') || '')}
       ${historyMode ? input('De','from',params.get('from'),`type="date" max="${today()}"`) + input('Até','to',params.get('to'),`type="date" max="${today()}"`) : ''}
       <div class="table-filter-end">${submit('Filtrar','filter')}</div><div class="form-error" role="alert"></div></form>
-    ${data.items.length ? `<div class="table-wrap panel"><table><thead><tr><th scope="col">Objeto</th><th scope="col">Status</th>
+    ${data.items.length ? `<div class="table-wrap panel" role="region" aria-label="Registros de objetos" tabindex="0"><table><thead><tr><th scope="col">Objeto</th><th scope="col">Status</th>
       <th scope="col">Data e local</th><th scope="col">Responsável ou destinatário</th><th scope="col">Ações</th></tr></thead>
       <tbody>${data.items.map(row).join('')}</tbody></table></div>${pager(path + url.search,data)}` :
       empty('Nenhum registro','Os itens que correspondem a esta seção ou filtro aparecem aqui.','','search')}`,path);
@@ -1212,9 +1213,9 @@ function bindAdminItems(items) {
 async function usersPage(url,token) {
   const data = await api(`/admin/users${url.search}`);
   if (token !== navigation) return;
-  site.innerHTML = adminShell(`${header('Usuários','Gerencie contas e acesso à administração.')}
+  site.innerHTML = adminShell(`${header('Usuários','')}
     <form class="panel table-filter users-filter" id="users-filter">${input('Nome ou e-mail','q',url.searchParams.get('q'),'maxlength="100" placeholder="Buscar usuário"')}${submit('Buscar','search')}</form>
-    ${data.items.length ? `<div class="table-wrap panel"><table><thead><tr><th scope="col">Conta</th><th scope="col">Perfil</th><th scope="col">Status</th><th scope="col">Cadastro</th><th scope="col">Ações</th></tr></thead>
+    ${data.items.length ? `<div class="table-wrap panel" role="region" aria-label="Contas cadastradas" tabindex="0"><table><thead><tr><th scope="col">Conta</th><th scope="col">Perfil</th><th scope="col">Status</th><th scope="col">Cadastro</th><th scope="col">Ações</th></tr></thead>
     <tbody>${data.items.map(user => `<tr><td><div class="table-item"><span class="avatar">${e(initial(user.name))}</span>
       <span><b>${e(user.name)}</b><small>${e(user.email || 'Acesso institucional')}</small></span></div></td><td>${user.role === 'admin' ? 'Administrador' : 'Usuário'}</td>
       <td>${user.active ? badge('open','Ativa') : badge('hidden','Inativa')}</td><td>${niceDate(user.createdAt)}</td>
