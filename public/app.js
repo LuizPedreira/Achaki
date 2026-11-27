@@ -226,6 +226,7 @@ async function home(url,token) {
   const params=new URLSearchParams(url.searchParams);
   params.set('recent','1');
   const previousResults=qs('#catalog-results');
+  const categoryScroll=previousResults?.querySelector('.catalog-categories')?.scrollLeft||0;
   previousResults?.setAttribute('aria-busy','true');
   const data=await api('/items?'+params);
   if(token!==navigation)return;
@@ -253,6 +254,17 @@ async function home(url,token) {
   const activeFilters=filterLabels.map(([key,label])=>link(withQuery(path,key,''),e(label)+icon('x'),{
     cls:'applied-filter',attrs:`aria-label="Remover filtro ${e(label)}"`})).join('');
   const heading=filtered?'Resultados da busca':'Itens encontrados recentemente';
+  const filterCount=filterLabels.length+(category?1:0);
+  const filterLabel=filterCount?`Filtros (${filterCount} ativos)`:'Filtros';
+  const syncCategories=()=>{
+    const list=qs('.catalog-categories');
+    const active=list?.querySelector('[aria-current=true]');
+    if(!list||!active)return;
+    list.scrollLeft=categoryScroll;
+    const bounds=list.getBoundingClientRect(), item=active.getBoundingClientRect();
+    if(item.left<bounds.left) list.scrollLeft+=item.left-bounds.left-4;
+    else if(item.right>bounds.right) list.scrollLeft+=item.right-bounds.right+4;
+  };
   const count=data.total===1?'1 item':data.total+' itens';
   const results=`<nav class="chips catalog-categories" aria-label="Categorias">${chips}</nav>
     ${activeFilters?`<div class="applied-filters">${activeFilters}</div>`:''}
@@ -261,14 +273,21 @@ async function home(url,token) {
   if(previousResults) {
     previousResults.innerHTML=results;
     previousResults.removeAttribute('aria-busy');
+    const filterButton=qs('#search-form [data-action=filters]');
+    if(filterButton){
+      filterButton.dataset.active=String(filterCount>0);
+      filterButton.setAttribute('aria-label',filterLabel);
+    }
+    syncCategories();
     const field=qs('#search-form input');
     if(field.value.trim()!==(params.get('q')||'')) field.value=params.get('q')||'';
     return;
   }
   site.innerHTML=shell(`<header class="mural-heading"><div><div class="campus-label">${e(session.campus)}</div><h1>Mural de achados</h1></div>${account}</header>
-    <div class="mural-tools"><form class="search-row" id="search-form" role="search"><div class="search-box">${icon('search')}<input class="control" name="q" type="search" aria-label="Buscar por palavra-chave" placeholder="Buscar por palavra-chave" value="${e(params.get('q')||'')}"></div>${btn('filters','Filtros','filter','filter-square')}</form>
+    <div class="mural-tools"><form class="search-row" id="search-form" role="search"><div class="search-box">${icon('search')}<input class="control" name="q" type="search" aria-label="Buscar por palavra-chave" placeholder="Buscar objeto" value="${e(params.get('q')||'')}"></div>${btn('filters','Filtros','filter','filter-square',`data-active="${filterCount>0}" aria-label="${e(filterLabel)}"`)}</form>
       <div class="mural-actions">${link('/novo/found','Encontrei um item',{cls:'report-action found',symbol:'plus'})}${link('/novo/lost','Perdi um item',{cls:'report-action',symbol:'search'})}</div></div>
     <section id="catalog-results" aria-label="Objetos encontrados">${results}</section>`,{home:true});
+  syncCategories();
   const search=qs('#search-form input');
   const run=()=>{
     clearTimeout(catalogSearchTimer);
